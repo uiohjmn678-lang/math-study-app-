@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>수학완성 - 로그인</title>
+  <link rel="stylesheet" href="auth.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+</head>
+<body>
+
+  <div class="auth-wrap">
+    <!-- 왼쪽 브랜드 패널 -->
+    <div class="brand-panel">
+      <div class="brand-inner">
+        <div class="brand-logo"><span class="accent">수</span>학완성</div>
+        <p class="brand-tagline">AI와 함께하는<br/>수능 수학 무료 학습</p>
+        <ul class="brand-features">
+          <li>📸 성적표 사진으로 자동 분석</li>
+          <li>🤖 Gemini AI 맞춤 문제 출제</li>
+          <li>📊 성장 그래프로 실력 확인</li>
+          <li>🎯 유형별 집중 트레이닝</li>
+        </ul>
+        <div class="brand-badge">무료 서비스</div>
+      </div>
+    </div>
+
+    <!-- 오른쪽 폼 패널 -->
+    <div class="form-panel">
+
+      <!-- 로그인 폼 -->
+      <div class="form-box active" id="form-login">
+        <h2 class="form-title">로그인</h2>
+        <p class="form-sub">계속하려면 로그인하세요</p>
+        <div class="input-group">
+          <label>이메일</label>
+          <input type="email" id="login-email" placeholder="example@email.com" class="inp" />
+        </div>
+        <div class="input-group">
+          <label>비밀번호</label>
+          <input type="password" id="login-pw" placeholder="비밀번호 입력" class="inp" />
+        </div>
+        <div id="login-error" class="error-msg hidden"></div>
+        <button class="btn-main" id="login-btn" onclick="doLogin()">로그인</button>
+        <div class="form-links">
+          <button class="link-btn" onclick="showForm('form-find-email')">아이디 찾기</button>
+          <span class="divider">|</span>
+          <button class="link-btn" onclick="showForm('form-find-pw')">비밀번호 찾기</button>
+          <span class="divider">|</span>
+          <button class="link-btn" onclick="showForm('form-signup')">회원가입</button>
+        </div>
+      </div>
+
+      <!-- 회원가입 폼 -->
+      <div class="form-box" id="form-signup">
+        <h2 class="form-title">회원가입</h2>
+        <p class="form-sub">수학완성과 함께 시작해요! 🎯</p>
+        <div class="input-group">
+          <label>이름</label>
+          <input type="text" id="signup-name" placeholder="이름 입력" class="inp" />
+        </div>
+        <div class="input-group">
+          <label>이메일</label>
+          <input type="email" id="signup-email" placeholder="example@email.com" class="inp" />
+        </div>
+        <div class="input-group">
+          <label>비밀번호 (6자리 이상)</label>
+          <input type="password" id="signup-pw" placeholder="비밀번호 입력" class="inp" />
+        </div>
+        <div class="input-group">
+          <label>비밀번호 확인</label>
+          <input type="password" id="signup-pw2" placeholder="비밀번호 재입력" class="inp" />
+        </div>
+        <div id="signup-error" class="error-msg hidden"></div>
+        <div id="signup-success" class="success-msg hidden"></div>
+        <button class="btn-main" id="signup-btn" onclick="doSignup()">회원가입</button>
+        <div class="form-links">
+          <button class="link-btn" onclick="showForm('form-login')">← 로그인으로 돌아가기</button>
+        </div>
+      </div>
+
+      <!-- 아이디 찾기 폼 -->
+      <div class="form-box" id="form-find-email">
+        <h2 class="form-title">아이디 찾기</h2>
+        <p class="form-sub">가입할 때 사용한 이메일이<br/>곧 아이디예요</p>
+        <div class="info-box">
+          💡 수학완성은 <strong>이메일</strong>을 아이디로 사용해요.<br/><br/>
+          이메일이 기억나지 않는다면 자주 사용하는<br/>
+          이메일 계정을 확인해보세요.<br/><br/>
+          비밀번호가 기억나지 않는 경우<br/>
+          아래 <strong>비밀번호 찾기</strong>를 이용하세요.
+        </div>
+        <button class="btn-main" onclick="showForm('form-find-pw')">비밀번호 찾기로 이동</button>
+        <div class="form-links">
+          <button class="link-btn" onclick="showForm('form-login')">← 로그인으로 돌아가기</button>
+        </div>
+      </div>
+
+      <!-- 비밀번호 찾기 폼 -->
+      <div class="form-box" id="form-find-pw">
+        <h2 class="form-title">비밀번호 찾기</h2>
+        <p class="form-sub">가입한 이메일로 비밀번호<br/>재설정 링크를 보내드려요</p>
+        <div class="input-group">
+          <label>가입한 이메일</label>
+          <input type="email" id="reset-email" placeholder="example@email.com" class="inp" />
+        </div>
+        <div id="reset-error" class="error-msg hidden"></div>
+        <div id="reset-success" class="success-msg hidden"></div>
+        <button class="btn-main" id="reset-btn" onclick="doResetPw()">재설정 메일 보내기 📧</button>
+        <div class="form-links">
+          <button class="link-btn" onclick="showForm('form-login')">← 로그인으로 돌아가기</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script type="module" src="auth.js"></script>
+</body>
+</html>

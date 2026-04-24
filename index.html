@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>수학완성 - AI 수능 수학 학습 도우미</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+
+  <!-- ===== SPLASH SCREEN ===== -->
+  <div id="splash">
+    <div class="splash-inner">
+      <div class="splash-logo">
+        <span class="logo-accent">수</span>학완성
+      </div>
+      <p class="splash-sub">AI 수능 수학 무료 학습 플랫폼</p>
+      <div class="splash-bar"><div class="splash-fill"></div></div>
+    </div>
+  </div>
+
+  <!-- ===== APP WRAPPER ===== -->
+  <div id="app" class="hidden">
+
+    <!-- ===== HEADER ===== -->
+    <header class="header">
+      <div class="header-logo">
+        <span class="logo-accent">수</span>학완성
+      </div>
+      <nav class="header-nav">
+        <button class="nav-btn active" data-page="home">🏠 홈</button>
+        <button class="nav-btn" data-page="analyze">📸 성적분석</button>
+        <button class="nav-btn" data-page="training">💪 트레이닝</button>
+        <button class="nav-btn" data-page="stats">📊 통계</button>
+      </nav>
+      <div class="header-right">
+        <div class="student-badge" id="studentBadge">
+          <span class="badge-name" id="badgeName">학생</span>
+          <span class="badge-grade" id="badgeGrade">등급 -</span>
+        </div>
+        <button class="btn-ghost" onclick="doLogout()" style="font-size:0.85rem;padding:8px 14px;">🚪 로그아웃</button>
+        <button class="settings-btn" id="settingsBtn">⚙️</button>
+      </div>
+    </header>
+
+    <!-- ===== PAGES ===== -->
+    <main class="main">
+
+      <!-- HOME PAGE -->
+      <section class="page active" id="page-home">
+        <div class="hero">
+          <div class="hero-text">
+            <p class="hero-eyebrow">무료 AI 수능 수학</p>
+            <h1 class="hero-title">
+              수학, 이제<br/>
+              <span class="hero-highlight">AI와 함께</span><br/>
+              정복하자
+            </h1>
+            <p class="hero-desc">사교육 없이, 내 수준에 딱 맞는 맞춤 학습.<br/>지금 바로 시작해보세요.</p>
+            <div class="hero-btns">
+              <button class="btn-primary" onclick="navigateTo('analyze')">📸 성적 사진 분석하기</button>
+              <button class="btn-ghost" onclick="navigateTo('training')">💪 오늘의 트레이닝</button>
+            </div>
+          </div>
+          <div class="hero-card">
+            <div class="card-glow"></div>
+            <div class="stat-card">
+              <div class="stat-row">
+                <span class="stat-label">현재 등급</span>
+                <span class="stat-value" id="homeGrade">-</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">최근 점수</span>
+                <span class="stat-value" id="homeScore">-점</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">오늘 목표</span>
+                <span class="stat-value done" id="homeGoal">미설정</span>
+              </div>
+              <div class="progress-wrap">
+                <div class="progress-label">약점 유형 집중도</div>
+                <div class="progress-bar">
+                  <div class="progress-fill" id="homeFocus" style="width:0%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- FEATURE CARDS -->
+        <div class="features">
+          <h2 class="section-title">주요 기능</h2>
+          <div class="feature-grid">
+            <div class="feature-card" onclick="navigateTo('analyze')">
+              <div class="feature-icon">📸</div>
+              <h3>성적 분석</h3>
+              <p>모의고사 성적표 사진을 찍으면 AI가 점수와 유형별 수준을 자동 분석해요.</p>
+              <span class="feature-tag">Gemini AI</span>
+            </div>
+            <div class="feature-card" onclick="navigateTo('training')">
+              <div class="feature-icon">🎯</div>
+              <h3>오늘의 학습 목표</h3>
+              <p>내 등급에 맞는 하루 학습량과 문제 풀이량을 AI가 매일 제시해줘요.</p>
+              <span class="feature-tag">맞춤형</span>
+            </div>
+            <div class="feature-card" onclick="navigateTo('training')">
+              <div class="feature-icon">✏️</div>
+              <h3>올바른 풀이 습관</h3>
+              <p>풀이과정을 정확하게 쓰는 습관을 만들 수 있도록 AI가 유도해줘요.</p>
+              <span class="feature-tag">습관 형성</span>
+            </div>
+            <div class="feature-card" onclick="navigateTo('training')">
+              <div class="feature-icon">🔥</div>
+              <h3>유형별 집중 트레이닝</h3>
+              <p>틀린 문제 오답 분석, 개념 이해, 유사문제 반복 풀이까지 한 번에!</p>
+              <span class="feature-tag">오답 분석</span>
+            </div>
+            <div class="feature-card" onclick="navigateTo('stats')">
+              <div class="feature-icon">📊</div>
+              <h3>성장 그래프</h3>
+              <p>점수 변화와 유형별 수준 향상을 시각적으로 확인할 수 있어요.</p>
+              <span class="feature-tag">통계</span>
+            </div>
+            <div class="feature-card coming">
+              <div class="feature-icon">🤖</div>
+              <h3>AI 튜터 채팅</h3>
+              <p>수학 개념이 헷갈릴 때 언제든지 AI 튜터에게 질문할 수 있어요.</p>
+              <span class="feature-tag">준비중</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- HOW IT WORKS -->
+        <div class="how-section">
+          <h2 class="section-title">이렇게 사용해요</h2>
+          <div class="steps">
+            <div class="step">
+              <div class="step-num">01</div>
+              <h4>성적표 사진 촬영</h4>
+              <p>모의고사 성적표를 사진으로 찍어 업로드하세요</p>
+            </div>
+            <div class="step-arrow">→</div>
+            <div class="step">
+              <div class="step-num">02</div>
+              <h4>AI 수준 분석</h4>
+              <p>Gemini AI가 점수와 유형별 수준을 분석해요</p>
+            </div>
+            <div class="step-arrow">→</div>
+            <div class="step">
+              <div class="step-num">03</div>
+              <h4>맞춤 트레이닝</h4>
+              <p>내 수준에 맞는 문제와 학습 목표를 받아요</p>
+            </div>
+            <div class="step-arrow">→</div>
+            <div class="step">
+              <div class="step-num">04</div>
+              <h4>성장 확인</h4>
+              <p>점수 변화와 취약 유형 개선을 그래프로 확인해요</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ANALYZE PAGE -->
+      <section class="page" id="page-analyze">
+        <div class="page-header">
+          <h2>📸 성적 분석</h2>
+          <p>모의고사 성적표 사진을 업로드하면 AI가 분석해드려요</p>
+        </div>
+
+        <div class="analyze-layout">
+          <div class="upload-box" id="uploadBox">
+            <input type="file" id="fileInput" accept="image/*" class="hidden" />
+            <div class="upload-inner" id="uploadInner" onclick="document.getElementById('fileInput').click()">
+              <div class="upload-icon">📸</div>
+              <p class="upload-title">성적표 사진 업로드</p>
+              <p class="upload-hint">클릭하거나 사진을 드래그하세요<br/>JPG, PNG 가능</p>
+            </div>
+            <img id="previewImg" class="hidden preview-img" alt="업로드 이미지" />
+          </div>
+
+          <div class="analyze-right">
+            <div class="api-key-section">
+              <label class="input-label">🔑 Gemini API 키</label>
+              <div class="input-row">
+                <input type="password" id="apiKeyInput" placeholder="AIza..." class="text-input" />
+                <button class="btn-save" id="saveKeyBtn" onclick="saveApiKey()">저장</button>
+              </div>
+              <p class="input-hint">
+                <a href="https://aistudio.google.com" target="_blank">Google AI Studio</a>에서 무료로 발급받으세요
+              </p>
+            </div>
+
+            <div class="analyze-options">
+              <label class="input-label">📝 추가 정보 (선택)</label>
+              <select class="select-input" id="examType">
+                <option value="">시험 유형 선택</option>
+                <option value="수능">수능</option>
+                <option value="모의고사">모의고사</option>
+                <option value="학교 시험">학교 시험</option>
+              </select>
+            </div>
+
+            <button class="btn-primary full-width" id="analyzeBtn" onclick="analyzeImage()">
+              🤖 AI 분석 시작
+            </button>
+
+            <div id="analyzeResult" class="result-box hidden">
+              <h3>📊 분석 결과</h3>
+              <div id="resultContent"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TRAINING PAGE -->
+      <section class="page" id="page-training">
+        <div class="page-header">
+          <h2>💪 트레이닝</h2>
+          <p>내 수준에 맞는 맞춤 학습을 시작해요</p>
+        </div>
+
+        <div class="training-tabs">
+          <button class="tab-btn active" data-tab="goal">🎯 오늘의 목표</button>
+          <button class="tab-btn" data-tab="solve">✏️ 풀이 트레이닝</button>
+          <button class="tab-btn" data-tab="basic">📚 기본 문제</button>
+          <button class="tab-btn" data-tab="intensive">🔥 유형 집중</button>
+        </div>
+
+        <!-- 오늘의 목표 -->
+        <div class="tab-content active" id="tab-goal">
+          <div class="goal-card">
+            <div class="goal-header">
+              <h3>오늘의 학습 목표</h3>
+              <button class="btn-refresh" onclick="generateGoal()">🔄 목표 생성</button>
+            </div>
+            <div id="goalContent">
+              <div class="goal-empty">
+                <p>📸 먼저 성적 분석을 완료하거나<br/>아래 버튼을 눌러 목표를 생성하세요</p>
+                <button class="btn-primary" onclick="generateGoal()">🤖 AI 목표 생성</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 풀이 트레이닝 -->
+        <div class="tab-content" id="tab-solve">
+          <div class="solve-card">
+            <h3>✏️ 올바른 풀이 습관 만들기</h3>
+            <p class="solve-desc">AI가 문제를 제시하면, 풀이 과정을 단계별로 작성해보세요</p>
+            <button class="btn-primary" onclick="getSolveProblem()">🤖 문제 받기</button>
+            <div id="solveProblem" class="problem-box hidden"></div>
+            <div id="solveInput" class="hidden">
+              <textarea id="solveTxt" placeholder="풀이 과정을 단계별로 적어주세요&#10;1단계: ...&#10;2단계: ...&#10;답:" class="solve-textarea"></textarea>
+              <button class="btn-primary" onclick="checkSolve()">제출 및 AI 피드백</button>
+            </div>
+            <div id="solveFeedback" class="result-box hidden"></div>
+          </div>
+        </div>
+
+        <!-- 기본 문제 -->
+        <div class="tab-content" id="tab-basic">
+          <div class="basic-card">
+            <h3>📚 기본 문제 풀기</h3>
+            <div class="type-select-row">
+              <select class="select-input" id="mathType">
+                <option value="수와 연산">수와 연산</option>
+                <option value="방정식과 부등식">방정식과 부등식</option>
+                <option value="함수">함수</option>
+                <option value="삼각함수">삼각함수</option>
+                <option value="수열">수열</option>
+                <option value="지수와 로그">지수와 로그</option>
+                <option value="확률과 통계">확률과 통계</option>
+                <option value="미적분">미적분</option>
+                <option value="벡터">벡터</option>
+              </select>
+              <button class="btn-primary" onclick="getBasicProblem()">🎲 문제 받기</button>
+            </div>
+            <div id="basicProblem" class="problem-box hidden"></div>
+            <div id="basicInput" class="hidden">
+              <input type="text" id="basicAns" placeholder="답을 입력하세요" class="text-input" />
+              <button class="btn-primary" onclick="checkBasic()">정답 확인</button>
+              <button class="btn-ghost hint-btn" onclick="getHint()">💡 힌트 보기</button>
+            </div>
+            <div id="basicFeedback" class="result-box hidden"></div>
+          </div>
+        </div>
+
+        <!-- 유형 집중 -->
+        <div class="tab-content" id="tab-intensive">
+          <div class="intensive-card">
+            <h3>🔥 유형별 집중 트레이닝</h3>
+            <p>틀린 문제 유형을 집중적으로 훈련해요</p>
+            <div class="weak-types" id="weakTypes">
+              <p class="empty-hint">성적 분석 후 약점 유형이 표시돼요</p>
+            </div>
+            <button class="btn-primary" onclick="startIntensive()">🔥 집중 트레이닝 시작</button>
+            <div id="intensiveProblem" class="problem-box hidden"></div>
+            <div id="intensiveFeedback" class="result-box hidden"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- STATS PAGE -->
+      <section class="page" id="page-stats">
+        <div class="page-header">
+          <h2>📊 나의 성장 통계</h2>
+          <p>점수 변화와 유형별 수준 향상을 확인해요</p>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stats-card span2">
+            <h3>📈 점수 변화 추이</h3>
+            <canvas id="scoreChart" width="600" height="200"></canvas>
+            <p class="chart-empty" id="scoreChartEmpty">성적 분석 기록이 쌓이면 그래프가 표시돼요</p>
+          </div>
+          <div class="stats-card">
+            <h3>🎯 유형별 수준</h3>
+            <div id="typeChart" class="type-bars"></div>
+          </div>
+          <div class="stats-card">
+            <h3>🏆 학습 현황</h3>
+            <div class="summary-list" id="summaryList">
+              <div class="summary-item">
+                <span>총 풀이 문제</span>
+                <span class="summary-val" id="totalProblems">0문제</span>
+              </div>
+              <div class="summary-item">
+                <span>정답률</span>
+                <span class="summary-val" id="accuracy">0%</span>
+              </div>
+              <div class="summary-item">
+                <span>연속 학습</span>
+                <span class="summary-val" id="streak">0일</span>
+              </div>
+              <div class="summary-item">
+                <span>현재 등급</span>
+                <span class="summary-val" id="currentGrade">-</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- SETTINGS MODAL -->
+  <div id="settingsModal" class="modal hidden">
+    <div class="modal-box">
+      <h3>⚙️ 설정</h3>
+      <label class="input-label">학생 이름</label>
+      <input type="text" id="settingName" placeholder="이름 입력" class="text-input" />
+      <label class="input-label">🔑 Gemini API 키</label>
+      <input type="password" id="settingKey" placeholder="AIza..." class="text-input" />
+      <div class="modal-actions">
+        <button class="btn-primary" onclick="saveSettings()">저장</button>
+        <button class="btn-ghost" onclick="closeModal()">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+  <script type="module" src="auth.js"></script>
+</body>
+</html>
