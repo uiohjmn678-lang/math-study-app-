@@ -8,6 +8,19 @@
   <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
 
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'input']
+      }
+    };
+  </script>
+  <script src="https://www.desmos.com/api/v1.9/calculator.js?apiKey=dcb31709b452b1cf9dc26972add0faa6"></script>
   <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
   <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
@@ -169,21 +182,81 @@
       <!-- ANALYZE PAGE -->
       <section class="page" id="page-analyze">
         <div class="page-header">
-          <h2>📸 성적 분석</h2>
-          <p>모의고사 성적표 사진을 업로드하면 AI가 분석해드려요</p>
+          <h2>📸 성적 분석 · 시험지 풀기</h2>
+          <p>성적표 사진(여러 장) 또는 시험지 PDF를 올리면 AI가 분석·문제 추출까지 해드려요</p>
+        </div>
+
+        <!-- 업로드 모드 탭 -->
+        <div class="upload-mode-tabs" id="uploadModeTabs">
+          <button class="umode-btn active" data-mode="image" onclick="switchUploadMode('image')">📸 이미지 (성적표)</button>
+          <button class="umode-btn" data-mode="pdf" onclick="switchUploadMode('pdf')">📄 PDF (시험지)</button>
         </div>
 
         <div class="analyze-layout">
-          <div class="upload-box" id="uploadBox">
-            <input type="file" id="fileInput" accept="image/*" class="hidden" />
-            <div class="upload-inner" id="uploadInner" onclick="document.getElementById('fileInput').click()">
-              <div class="upload-icon">📸</div>
-              <p class="upload-title">성적표 사진 업로드</p>
-              <p class="upload-hint">클릭하거나 사진을 드래그하세요<br/>JPG, PNG 가능</p>
+          <!-- 왼쪽: 업로드 영역 -->
+          <div class="upload-col">
+
+            <!-- 이미지 업로드 모드 -->
+            <div id="imageModeArea">
+              <input type="file" id="fileInput" accept="image/*,application/pdf" multiple class="hidden" />
+              <div class="upload-box" id="uploadBox"
+                onclick="document.getElementById('fileInput').click()"
+                ondragover="event.preventDefault();this.classList.add('drag-over')"
+                ondragleave="this.classList.remove('drag-over')"
+                ondrop="handleDrop(event,'image')">
+                <div class="upload-inner" id="uploadInner">
+                  <div class="upload-icon">📸</div>
+                  <p class="upload-title">이미지 업로드</p>
+                  <p class="upload-hint">클릭하거나 드래그하세요<br/>이미지 여러 장 또는 PDF 가능</p>
+                </div>
+              </div>
+              <!-- 이미지 미리보기 그리드 -->
+              <div id="imagePreviewGrid" class="image-preview-grid hidden"></div>
             </div>
-            <img id="previewImg" class="hidden preview-img" alt="업로드 이미지" />
+
+            <!-- PDF 업로드 모드 -->
+            <div id="pdfModeArea" class="hidden">
+              <input type="file" id="pdfInput" accept="application/pdf" class="hidden" />
+              <div class="upload-box pdf-upload-box" id="pdfUploadBox"
+                onclick="document.getElementById('pdfInput').click()"
+                ondragover="event.preventDefault();this.classList.add('drag-over')"
+                ondragleave="this.classList.remove('drag-over')"
+                ondrop="handleDrop(event,'pdf')">
+                <div class="upload-inner">
+                  <div class="upload-icon">📄</div>
+                  <p class="upload-title">시험지 PDF 업로드</p>
+                  <p class="upload-hint">클릭하거나 드래그하세요<br/>모의고사·수능 시험지 PDF</p>
+                </div>
+              </div>
+              <!-- PDF 정보 표시 -->
+              <div id="pdfInfo" class="pdf-info-box hidden"></div>
+
+              <!-- PDF 전용 기능 버튼 2개 -->
+              <div id="pdfActions" class="pdf-actions hidden">
+                <button class="pdf-action-btn active" data-paction="grade" onclick="setPdfAction('grade')">
+                  <span class="pdf-action-main">✏️ 시험지 채점 + 약점 분석</span>
+                  <span class="pdf-action-desc">내가 쓴 답을 AI가 읽고 자동 채점 + 약점 분석해요</span>
+                </button>
+                <button class="pdf-action-btn" data-paction="score" onclick="setPdfAction('score')">
+                  <span class="pdf-action-main">📊 성적표 분석</span>
+                  <span class="pdf-action-desc">채점된 성적표를 보고 등급·약점을 분석해요</span>
+                </button>
+              </div>
+
+              <!-- 못 읽은 문제 보완 입력 (grade 모드일 때만) -->
+              <div id="missedAnswerWrap" class="hidden">
+                <div class="missed-answer-box">
+                  <div class="missed-answer-header">
+                    <span>⚠️ AI가 못 읽은 문제가 있나요?</span>
+                  </div>
+                  <p class="input-hint" style="margin-bottom:8px">직접 입력하면 더 정확하게 채점해요<br/>예) 1-① 2-④ 3-③ 4-②</p>
+                  <input type="text" id="missedAnswers" class="text-input" placeholder="1-① 2-④ 3-③ 4-② (없으면 비워두세요)" />
+                </div>
+              </div>
+            </div>
           </div>
 
+          <!-- 오른쪽: 설정 + 분석 버튼 -->
           <div class="analyze-right">
             <div class="api-key-section">
               <label class="input-label">🔑 Gemini API 키</label>
@@ -196,23 +269,32 @@
               </p>
             </div>
 
-            <div class="analyze-options">
-              <label class="input-label">📝 추가 정보 (선택)</label>
+            <div class="analyze-options" id="examTypeWrap">
+              <label class="input-label">📝 시험 유형 (선택)</label>
               <select class="select-input" id="examType">
-                <option value="">시험 유형 선택</option>
+                <option value="">선택</option>
                 <option value="수능">수능</option>
                 <option value="모의고사">모의고사</option>
                 <option value="학교 시험">학교 시험</option>
               </select>
             </div>
 
-            <button class="btn-primary full-width" id="analyzeBtn" onclick="analyzeImage()">
+            <button class="btn-primary full-width" id="analyzeBtn" onclick="runAnalyze()">
               🤖 AI 분석 시작
             </button>
 
             <div id="analyzeResult" class="result-box hidden">
-              <h3>📊 분석 결과</h3>
+              <h3 id="analyzeResultTitle">📊 분석 결과</h3>
               <div id="resultContent"></div>
+            </div>
+
+            <!-- PDF 문제 추출 결과 - 문제 목록 & 풀기 -->
+            <div id="pdfProblemsArea" class="hidden">
+              <div class="pdf-problems-header">
+                <h3>📋 추출된 문제</h3>
+                <span id="pdfProblemCount" class="problem-count-badge"></span>
+              </div>
+              <div id="pdfProblemList" class="pdf-problem-list"></div>
             </div>
           </div>
         </div>
@@ -237,7 +319,7 @@
           <div class="goal-card">
             <div class="goal-header">
               <h3>오늘의 학습 목표</h3>
-              <button class="btn-refresh" onclick="generateGoal()">🔄 목표 생성</button>
+              <button class="btn-refresh" onclick="generateGoal()">📅 오늘의 목표</button>
             </div>
             <div id="goalContent">
               <div class="goal-empty">
@@ -255,6 +337,11 @@
             <p class="solve-desc">AI가 문제를 제시하면, 풀이 과정을 단계별로 작성해보세요</p>
             <button class="btn-primary" onclick="getSolveProblem()">🤖 문제 받기</button>
             <div id="solveProblem" class="problem-box hidden"></div>
+            <!-- Desmos 그래프 (기하 문제일 때만 표시) -->
+            <div id="solveGraph" class="desmos-wrap hidden">
+              <div class="desmos-header">📐 그래프</div>
+              <div id="solveGraphEl" class="desmos-container"></div>
+            </div>
             <div id="solveInput" class="hidden">
               <textarea id="solveTxt" placeholder="풀이 과정을 단계별로 적어주세요&#10;1단계: ...&#10;2단계: ...&#10;답:" class="solve-textarea"></textarea>
               <button class="btn-primary" onclick="checkSolve()">제출 및 AI 피드백</button>
@@ -282,6 +369,11 @@
               <button class="btn-primary" onclick="getBasicProblem()">🎲 문제 받기</button>
             </div>
             <div id="basicProblem" class="problem-box hidden"></div>
+            <!-- Desmos 그래프 (기하 문제일 때만 표시) -->
+            <div id="basicGraph" class="desmos-wrap hidden">
+              <div class="desmos-header">📐 그래프</div>
+              <div id="basicGraphEl" class="desmos-container"></div>
+            </div>
             <div id="basicInput" class="hidden">
               <input type="text" id="basicAns" placeholder="답을 입력하세요" class="text-input" />
               <button class="btn-primary" onclick="checkBasic()">정답 확인</button>
@@ -365,7 +457,7 @@
     </div>
   </div>
 
-  <script src="script.js"></script>
   <script type="module" src="auth.js"></script>
+  <script type="module" src="script.js"></script>
 </body>
 </html>
