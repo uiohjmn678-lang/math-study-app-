@@ -226,6 +226,124 @@ canvas { width: 100% !important; }
 .goal-item-title { font-weight: 600; margin-bottom: 4px; color: var(--text); }
 .goal-item-desc { color: var(--text2); font-size: 0.82rem; }
 
+/* ===== UPLOAD MODE TABS ===== */
+.upload-mode-tabs { display: flex; gap: 8px; padding: 0 64px 20px; }
+.umode-btn { background: var(--card); border: 1.5px solid var(--border); color: var(--text2); font-weight: 600; cursor: pointer; padding: 10px 22px; border-radius: var(--radius-sm); font-size: 0.88rem; font-family: 'Pretendard', sans-serif; transition: all 0.2s; box-shadow: var(--shadow-card); }
+.umode-btn:hover { border-color: var(--accent); color: var(--accent); }
+.umode-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 4px 16px var(--accent-glow); }
+
+/* ===== ANALYZE LAYOUT 개선 ===== */
+.upload-col { display: flex; flex-direction: column; gap: 16px; }
+.upload-box { background: var(--card); border: 2px dashed var(--border); border-radius: var(--radius); min-height: 220px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; overflow: hidden; box-shadow: var(--shadow-card); cursor: pointer; }
+.upload-box:hover, .upload-box.drag-over { border-color: var(--accent); background: rgba(74,144,226,0.03); }
+.pdf-upload-box { min-height: 180px; }
+
+/* ===== 이미지 미리보기 그리드 ===== */
+.image-preview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-top: 4px; }
+.preview-thumb-wrap { position: relative; border-radius: var(--radius-sm); overflow: hidden; border: 1.5px solid var(--border); aspect-ratio: 3/4; background: var(--bg3); }
+.preview-thumb-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.preview-remove-btn { position: absolute; top: 4px; right: 4px; background: rgba(255,59,48,0.85); color: #fff; border: none; border-radius: 50%; width: 22px; height: 22px; font-size: 0.75rem; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; }
+.preview-remove-btn:hover { background: var(--red); }
+.add-more-btn { border: 2px dashed var(--border); border-radius: var(--radius-sm); aspect-ratio: 3/4; background: var(--bg3); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer; color: var(--text3); font-size: 0.75rem; transition: all 0.2s; }
+.add-more-btn:hover { border-color: var(--accent); color: var(--accent); }
+.add-more-btn span { font-size: 1.5rem; }
+
+/* ===== PDF 정보 & 액션 ===== */
+.pdf-info-box { background: rgba(74,144,226,0.06); border: 1.5px solid rgba(74,144,226,0.2); border-radius: var(--radius-sm); padding: 14px 18px; display: flex; align-items: center; gap: 12px; }
+.pdf-info-icon { font-size: 2rem; flex-shrink: 0; }
+.pdf-info-name { font-weight: 700; font-size: 0.9rem; color: var(--text); margin-bottom: 2px; }
+.pdf-info-size { font-size: 0.78rem; color: var(--text3); }
+.pdf-remove-btn { margin-left: auto; background: none; border: 1px solid var(--border); color: var(--text3); border-radius: 8px; padding: 4px 10px; font-size: 0.78rem; cursor: pointer; flex-shrink: 0; }
+.pdf-remove-btn:hover { border-color: var(--red); color: var(--red); }
+
+.pdf-actions { display: flex; flex-direction: column; gap: 8px; }
+.pdf-action-btn { background: var(--card); border: 1.5px solid var(--border); color: var(--text2); font-weight: 600; cursor: pointer; padding: 14px 18px; border-radius: var(--radius-sm); font-size: 0.88rem; font-family: 'Pretendard', sans-serif; transition: all 0.2s; text-align: left; box-shadow: var(--shadow-card); display: flex; flex-direction: column; gap: 4px; }
+.pdf-action-btn:hover { border-color: var(--accent); color: var(--accent); }
+.pdf-action-btn.active { background: rgba(74,144,226,0.08); border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.pdf-action-main { font-size: 0.92rem; font-weight: 700; }
+.pdf-action-desc { font-size: 0.78rem; color: var(--text3); font-weight: 400; }
+.pdf-action-btn.active .pdf-action-desc { color: var(--accent2); }
+
+.pdf-ask-wrap textarea { margin-top: 0; }
+
+/* ===== PDF 문제 목록 ===== */
+.pdf-problems-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.pdf-problems-header h3 { font-weight: 700; color: var(--text); }
+.problem-count-badge { background: var(--accent); color: #fff; font-size: 0.75rem; font-weight: 700; padding: 3px 10px; border-radius: 99px; }
+.pdf-problem-list { display: flex; flex-direction: column; gap: 12px; max-height: 520px; overflow-y: auto; padding-right: 4px; }
+.pdf-problem-item { background: var(--bg3); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 16px 18px; }
+.pdf-problem-num { font-size: 0.75rem; font-weight: 700; color: var(--accent); margin-bottom: 6px; }
+.pdf-problem-text { font-size: 0.88rem; color: var(--text); line-height: 1.7; margin-bottom: 12px; white-space: pre-wrap; }
+.pdf-problem-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-solve-this { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 7px 14px; font-size: 0.8rem; font-weight: 700; cursor: pointer; font-family: 'Pretendard', sans-serif; transition: all 0.2s; }
+.btn-solve-this:hover { opacity: 0.85; }
+.btn-ask-this { background: none; border: 1.5px solid var(--border); color: var(--text2); border-radius: 8px; padding: 6px 14px; font-size: 0.8rem; font-weight: 600; cursor: pointer; font-family: 'Pretendard', sans-serif; transition: all 0.2s; }
+.btn-ask-this:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ===== 풀기 모달 ===== */
+.solve-modal { position: fixed; inset: 0; z-index: 300; background: rgba(26,35,64,0.4); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.solve-modal-box { background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 32px; width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(74,144,226,0.2); display: flex; flex-direction: column; gap: 16px; }
+.solve-modal-header { display: flex; justify-content: space-between; align-items: center; }
+.solve-modal-header h3 { font-weight: 800; font-size: 1.1rem; color: var(--text); }
+.modal-close-btn { background: none; border: none; font-size: 1.3rem; cursor: pointer; color: var(--text3); }
+.solve-modal-problem { background: rgba(74,144,226,0.06); border-left: 4px solid var(--accent); border-radius: var(--radius-sm); padding: 16px; font-size: 0.9rem; line-height: 1.8; color: var(--text); white-space: pre-wrap; }
+.solve-modal-feedback { background: var(--bg3); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 16px; font-size: 0.88rem; line-height: 1.8; }
+
+/* ===== btn-save ===== */
+.btn-save { background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sm); padding: 10px 16px; font-size: 0.85rem; font-weight: 700; cursor: pointer; font-family: 'Pretendard', sans-serif; flex-shrink: 0; transition: all 0.2s; }
+.btn-save:hover { opacity: 0.85; }
+.btn-refresh { background: none; border: 1.5px solid var(--border); color: var(--text2); border-radius: var(--radius-sm); padding: 8px 14px; font-size: 0.82rem; cursor: pointer; font-family: 'Pretendard', sans-serif; transition: all 0.2s; }
+.btn-refresh:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ===== 오늘의 목표 - 단일 카드 ===== */
+.goal-card-single { display: flex; flex-direction: column; gap: 0; }
+.goal-section { padding: 18px 0; border-bottom: 1px solid var(--border); }
+.goal-section:last-child { border-bottom: none; padding-bottom: 0; }
+.goal-section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.goal-section-icon { font-size: 1.2rem; flex-shrink: 0; }
+.goal-section-title { font-weight: 700; font-size: 0.9rem; }
+.goal-section-body { color: var(--text2); font-size: 0.9rem; line-height: 1.7; padding-left: 32px; }
+
+/* ===== 피드백 스타일 ===== */
+.feedback-wrap { display: flex; flex-direction: column; gap: 0; }
+.feedback-verdict { font-size: 1.1rem; font-weight: 800; padding: 14px 18px; border-radius: var(--radius-sm); margin-bottom: 16px; text-align: center; }
+.feedback-verdict.correct { background: rgba(52,199,89,0.12); color: #34C759; border: 1.5px solid rgba(52,199,89,0.3); }
+.feedback-verdict.wrong { background: rgba(255,59,48,0.1); color: #FF3B30; border: 1.5px solid rgba(255,59,48,0.25); }
+.feedback-section { padding: 14px 0; border-bottom: 1px solid var(--border); }
+.feedback-section:last-child { border-bottom: none; }
+.feedback-section-title { font-weight: 700; font-size: 0.82rem; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.feedback-section-body { color: var(--text); font-size: 0.88rem; line-height: 1.8; padding-left: 4px; }
+
+/* ===== 분석 결과 카드 ===== */
+.analysis-cards { display: flex; flex-direction: column; gap: 12px; }
+.analysis-card { background: var(--bg3); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 16px 20px; }
+.analysis-card-title { font-weight: 700; font-size: 0.88rem; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+.analysis-card-body { color: var(--text); font-size: 0.88rem; line-height: 1.9; }
+
+/* ===== 못 읽은 문제 입력 박스 ===== */
+.missed-answer-box { background: rgba(255,149,0,0.07); border: 1.5px solid rgba(255,149,0,0.3); border-radius: var(--radius-sm); padding: 14px 16px; margin-top: 12px; }
+.missed-answer-header { font-weight: 700; font-size: 0.85rem; color: #FF9500; margin-bottom: 8px; }
+
+/* ===== 집중 트레이닝 문제 ===== */
+.intensive-problem-wrap { display: flex; flex-direction: column; gap: 14px; }
+.intensive-problem-wrap strong { font-size: 0.95rem; color: var(--text); }
+.intensive-problem-body { font-size: 0.92rem; line-height: 1.9; color: var(--text); white-space: pre-wrap; margin-top: 4px; }
+.intensive-caution { background: rgba(255,149,0,0.08); border-left: 3px solid #FF9500; border-radius: 0 8px 8px 0; padding: 10px 14px; font-size: 0.85rem; color: var(--text); }
+
+/* ===== DESMOS 그래프 ===== */
+.desmos-wrap { margin: 12px 0; border: 1.5px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; box-shadow: var(--shadow-card); }
+.desmos-header { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; font-size: 0.82rem; font-weight: 700; padding: 8px 14px; }
+.desmos-container { width: 100%; height: 480px; }
+
+/* ===== 커리큘럼 정보 바 ===== */
+.curriculum-info-bar { display: flex; align-items: center; gap: 10px; padding: 10px 0 16px; font-size: 0.85rem; color: var(--text2); font-weight: 600; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.curriculum-badge { background: rgba(74,144,226,0.1); color: var(--accent); border-radius: 99px; padding: 3px 12px; font-size: 0.78rem; font-weight: 700; }
+
+/* ===== 커리큘럼 완료 안내 ===== */
+.curriculum-end-notice { text-align: center; padding: 40px 20px; color: var(--text2); }
+.curriculum-end-notice h3 { font-size: 1.1rem; font-weight: 700; color: var(--text); margin-bottom: 10px; }
+.curriculum-end-notice p { font-size: 0.9rem; line-height: 1.7; }
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 900px) {
   .hero { flex-direction: column; padding: 40px 24px; gap: 32px; }
