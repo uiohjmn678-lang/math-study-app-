@@ -344,6 +344,93 @@ canvas { width: 100% !important; }
 .curriculum-end-notice h3 { font-size: 1.1rem; font-weight: 700; color: var(--text); margin-bottom: 10px; }
 .curriculum-end-notice p { font-size: 0.9rem; line-height: 1.7; }
 
+/* ===== 선택지 클릭 ===== */
+.problem-text { font-size: 0.92rem; line-height: 1.9; color: var(--text); margin-bottom: 16px; white-space: pre-wrap; }
+.choice-list { display: flex; flex-direction: column; gap: 8px; }
+.choice-btn { display: flex; align-items: flex-start; gap: 12px; background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 12px 16px; cursor: pointer; text-align: left; font-family: 'Pretendard', sans-serif; font-size: 0.9rem; color: var(--text); transition: all 0.2s; box-shadow: var(--shadow-card); width: 100%; }
+.choice-btn:hover { border-color: var(--accent); background: rgba(74,144,226,0.04); }
+.choice-btn.selected { border-color: var(--accent); background: rgba(74,144,226,0.1); color: var(--accent); font-weight: 700; }
+.choice-num { font-weight: 700; color: var(--accent); flex-shrink: 0; font-size: 1rem; }
+.choice-btn.selected .choice-num { color: var(--accent); }
+.choice-text { flex: 1; }
+
+/* ===== D-DAY 배너 ===== */
+.dday-banner { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; border-radius: var(--radius-sm); padding: 10px 16px; font-weight: 700; font-size: 0.95rem; text-align: center; margin-bottom: 14px; letter-spacing: 0.5px; }
+
+/* ===== 오답 노트 ===== */
+.wrong-note-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.wrong-note-list { display: flex; flex-direction: column; gap: 12px; max-height: 400px; overflow-y: auto; }
+.wrong-note-item { background: var(--bg3); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; }
+.wrong-note-item.retried { border-color: var(--green); opacity: 0.7; }
+.wrong-note-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.wrong-note-type { background: rgba(74,144,226,0.1); color: var(--accent); font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; }
+.wrong-note-date { color: var(--text3); font-size: 0.75rem; }
+.wrong-retried-badge { color: var(--green); font-size: 0.75rem; font-weight: 700; }
+.wrong-note-problem { font-size: 0.85rem; color: var(--text); margin-bottom: 8px; line-height: 1.5; }
+.wrong-note-ans { font-size: 0.82rem; margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-retry { background: none; border: 1.5px solid var(--border); color: var(--text2); border-radius: 8px; padding: 5px 12px; font-size: 0.8rem; cursor: pointer; font-family: 'Pretendard', sans-serif; transition: all 0.2s; }
+.btn-retry:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ===== 단원별 진도표 ===== */
+.progress-table { display: flex; flex-direction: column; gap: 16px; }
+.progress-subject { }
+.progress-subject-name { font-weight: 700; font-size: 0.88rem; color: var(--text); margin-bottom: 8px; }
+.progress-units { display: flex; flex-direction: column; gap: 6px; }
+.progress-unit { display: flex; align-items: center; gap: 10px; }
+.progress-unit-name { font-size: 0.82rem; color: var(--text2); width: 130px; flex-shrink: 0; }
+.progress-unit-bar { flex: 1; height: 8px; background: var(--border); border-radius: 99px; overflow: hidden; }
+.progress-unit-fill { height: 100%; border-radius: 99px; transition: width 0.5s; }
+.progress-unit-pct { font-size: 0.75rem; color: var(--text3); width: 30px; text-align: right; }
+
+/* ===== 성적 예측 ===== */
+.prediction-box { min-height: 80px; }
+.prediction-content { display: flex; align-items: center; gap: 32px; padding: 8px 0; }
+.prediction-main { text-align: center; }
+.prediction-score { font-size: 2.5rem; font-weight: 900; color: var(--accent); line-height: 1; }
+.prediction-grade { font-size: 0.9rem; color: var(--text2); font-weight: 600; margin-top: 4px; }
+.prediction-detail { display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; color: var(--text); }
+
+/* ===== 패턴 분석 ===== */
+.pattern-box { display: flex; flex-direction: column; gap: 10px; }
+.pattern-item { display: flex; align-items: center; gap: 10px; }
+.pattern-type { font-size: 0.82rem; color: var(--text); width: 110px; flex-shrink: 0; }
+.pattern-bar-wrap { flex: 1; height: 10px; background: var(--border); border-radius: 99px; overflow: hidden; }
+.pattern-bar { height: 100%; background: var(--red); border-radius: 99px; transition: width 0.5s; }
+.pattern-pct { font-size: 0.75rem; color: var(--text3); width: 30px; text-align: right; }
+
+/* ===== 배지 ===== */
+.badge-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.badge-item { text-align: center; padding: 10px 6px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); transition: all 0.2s; }
+.badge-item.earned { border-color: var(--accent); background: rgba(74,144,226,0.06); }
+.badge-item.locked { opacity: 0.45; }
+.badge-icon { font-size: 1.6rem; margin-bottom: 4px; }
+.badge-name { font-size: 0.72rem; font-weight: 600; color: var(--text2); }
+.badge-toast { position: fixed; bottom: 30px; right: 24px; z-index: 999; background: var(--navy, #1E3A5F); color: #fff; padding: 12px 20px; border-radius: var(--radius-sm); font-size: 0.9rem; box-shadow: 0 8px 24px rgba(0,0,0,0.2); animation: slideUp 0.3s ease; }
+@keyframes slideUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+
+/* ===== 유형별 수준 그리드 ===== */
+.type-level-grid { display: flex; flex-direction: column; gap: 8px; }
+.type-level-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.type-level-row:last-child { border-bottom: none; }
+.type-level-name { font-size: 0.88rem; color: var(--text); font-weight: 600; width: 110px; flex-shrink: 0; }
+.type-level-badge { font-size: 0.78rem; font-weight: 700; padding: 3px 10px; border-radius: 99px; flex-shrink: 0; }
+.type-level-note { font-size: 0.78rem; color: var(--text3); flex: 1; }
+
+/* ===== 약점 유형 목록 ===== */
+.weak-type-list { display: flex; flex-direction: column; gap: 10px; }
+.weak-type-item { display: flex; align-items: flex-start; gap: 12px; padding: 10px 14px; background: rgba(255,59,48,0.05); border: 1px solid rgba(255,59,48,0.15); border-radius: var(--radius-sm); }
+.weak-type-num { background: #FF3B30; color: #fff; font-size: 0.75rem; font-weight: 700; width: 22px; height: 22px; border-radius: 99px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+.weak-type-name { font-size: 0.88rem; font-weight: 700; color: var(--text); margin-bottom: 3px; }
+.weak-type-reason { font-size: 0.82rem; color: var(--text2); line-height: 1.5; }
+
+/* ===== 힌트 박스 ===== */
+.hint-box { background: rgba(88,86,214,0.08); border: 1.5px solid rgba(88,86,214,0.25); color: var(--text); border-radius: var(--radius-sm); padding: 16px 20px; font-size: 0.92rem; line-height: 1.8; }
+.hint-box strong { color: #5856D6; }
+
+/* ===== 최종 정답 박스 ===== */
+.feedback-answer-box { background: linear-gradient(135deg, rgba(74,144,226,0.1), rgba(107,126,201,0.1)); border: 1.5px solid var(--accent); border-radius: var(--radius-sm); padding: 12px 18px; font-size: 1rem; color: var(--text); margin-bottom: 14px; }
+.feedback-answer-box strong { color: var(--accent); font-size: 1.1rem; }
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 900px) {
   .hero { flex-direction: column; padding: 40px 24px; gap: 32px; }
