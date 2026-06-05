@@ -29,6 +29,8 @@ onAuthStateChanged(auth, (user) => {
 // ===== 로그아웃 (index.html에서 사용) =====
 window.doLogout = async function() {
   try {
+    // API 키만 제거, 성적/커리큘럼 데이터는 보존
+    localStorage.removeItem('gemini_api_key');
     await signOut(auth);
     window.location.href = 'auth.html';
   } catch (e) {
@@ -125,10 +127,19 @@ if (isAuthPage) {
     btn.textContent = '재설정 메일 보내기 📧'; btn.disabled = false;
   }
 
+  // 로그인 폼 엔터키 (이메일 + 비밀번호 둘 다)
+  const loginEmail = document.getElementById('login-email');
   const loginPw = document.getElementById('login-pw');
-  if (loginPw) {
-    loginPw.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') doLogin();
-    });
-  }
+  if (loginEmail) loginEmail.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+  if (loginPw) loginPw.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+
+  // 회원가입 폼 엔터키
+  ['signup-name', 'signup-email', 'signup-pw', 'signup-pw2'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSignup(); });
+  });
+
+  // 비밀번호 찾기 폼 엔터키
+  const resetEmail = document.getElementById('reset-email');
+  if (resetEmail) resetEmail.addEventListener('keydown', (e) => { if (e.key === 'Enter') doResetPw(); });
 }
