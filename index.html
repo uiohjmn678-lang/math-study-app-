@@ -20,8 +20,8 @@
       }
     };
   </script>
-  <script src="https://www.desmos.com/api/v1.9/calculator.js?apiKey=dcb31709b452b1cf9dc26972add0faa6"></script>
-  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://www.desmos.com/api/v1.9/calculator.js?apiKey=dcb31709b452b1cf9dc26972add0fda6"></script>
   <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
 <body>
@@ -83,6 +83,9 @@
           <div class="hero-card">
             <div class="card-glow"></div>
             <div class="stat-card">
+              <div class="dday-banner" id="ddayBanner">
+                📅 수능까지 <span id="ddayCount">D-???</span>
+              </div>
               <div class="stat-row">
                 <span class="stat-label">현재 등급</span>
                 <span class="stat-value" id="homeGrade">-</span>
@@ -278,6 +281,14 @@
                 <option value="학교 시험">학교 시험</option>
               </select>
             </div>
+            <div class="analyze-options" id="subjectTypeWrap">
+              <label class="input-label">📚 선택과목</label>
+              <select class="select-input" id="subjectType">
+                <option value="확률과통계">확률과통계</option>
+                <option value="미적분">미적분</option>
+                <option value="기하">기하</option>
+              </select>
+            </div>
 
             <button class="btn-primary full-width" id="analyzeBtn" onclick="runAnalyze()">
               🤖 AI 분석 시작
@@ -309,7 +320,7 @@
 
         <div class="training-tabs">
           <button class="tab-btn active" data-tab="goal">🎯 오늘의 목표</button>
-          <button class="tab-btn" data-tab="solve">✏️ 풀이 트레이닝</button>
+          <button class="tab-btn" data-tab="solve">✏️ 풀이 연습</button>
           <button class="tab-btn" data-tab="basic">📚 기본 문제</button>
           <button class="tab-btn" data-tab="intensive">🔥 유형 집중</button>
         </div>
@@ -330,21 +341,21 @@
           </div>
         </div>
 
-        <!-- 풀이 트레이닝 -->
+        <!-- 풀이 연습 -->
         <div class="tab-content" id="tab-solve">
           <div class="solve-card">
-            <h3>✏️ 올바른 풀이 습관 만들기</h3>
-            <p class="solve-desc">AI가 문제를 제시하면, 풀이 과정을 단계별로 작성해보세요</p>
-            <button class="btn-primary" onclick="getSolveProblem()">🤖 문제 받기</button>
-            <div id="solveProblem" class="problem-box hidden"></div>
-            <!-- Desmos 그래프 (기하 문제일 때만 표시) -->
-            <div id="solveGraph" class="desmos-wrap hidden">
-              <div class="desmos-header">📐 그래프</div>
-              <div id="solveGraphEl" class="desmos-container"></div>
+            <h3>✏️ 풀이 연습</h3>
+            <p class="solve-desc">풀이를 종이에 작성한 뒤 사진으로 찍어 올려주세요. AI가 맞는지 확인하고 피드백해드려요</p>
+            <div class="upload-area" id="solveUploadArea" onclick="document.getElementById('solveImageInput').click()">
+              <div class="upload-icon">📷</div>
+              <p class="upload-text">풀이 사진을 클릭하거나 드래그해서 올려주세요</p>
+              <p style="font-size:0.8rem;color:var(--text3);margin-top:4px;">JPG, PNG 지원</p>
             </div>
-            <div id="solveInput" class="hidden">
-              <textarea id="solveTxt" placeholder="풀이 과정을 단계별로 적어주세요&#10;1단계: ...&#10;2단계: ...&#10;답:" class="solve-textarea"></textarea>
-              <button class="btn-primary" onclick="checkSolve()">제출 및 AI 피드백</button>
+            <input type="file" id="solveImageInput" accept="image/*" style="display:none" onchange="handleSolveImage(event)" />
+            <div id="solvePreview" class="hidden" style="margin-top:12px;">
+              <img id="solvePreviewImg" style="max-width:100%;border-radius:12px;border:1.5px solid var(--border);" />
+              <button class="btn-primary" onclick="analyzeSolveImage()" style="margin-top:12px;">🤖 AI 피드백 받기</button>
+              <button class="btn-ghost" onclick="resetSolveUpload()" style="margin-top:8px;">다시 선택</button>
             </div>
             <div id="solveFeedback" class="result-box hidden"></div>
           </div>
@@ -356,29 +367,43 @@
             <h3>📚 기본 문제 풀기</h3>
             <div class="type-select-row">
               <select class="select-input" id="mathType">
-                <option value="수와 연산">수와 연산</option>
-                <option value="방정식과 부등식">방정식과 부등식</option>
-                <option value="함수">함수</option>
-                <option value="삼각함수">삼각함수</option>
-                <option value="수열">수열</option>
-                <option value="지수와 로그">지수와 로그</option>
-                <option value="확률과 통계">확률과 통계</option>
-                <option value="미적분">미적분</option>
-                <option value="벡터">벡터</option>
+                <optgroup label="📘 공통수학">
+                  <option value="수와 연산">수와 연산</option>
+                  <option value="방정식과 부등식">방정식과 부등식</option>
+                  <option value="함수">함수</option>
+                  <option value="수열">수열</option>
+                </optgroup>
+                <optgroup label="📙 수학 I">
+                  <option value="지수와 로그">지수와 로그</option>
+                  <option value="삼각함수">삼각함수</option>
+                </optgroup>
+                <optgroup label="📗 수학 II">
+                  <option value="함수의 극한과 연속">함수의 극한과 연속</option>
+                  <option value="미분">미분</option>
+                  <option value="적분">적분</option>
+                </optgroup>
+                <optgroup label="📈 미적분 (선택)">
+                  <option value="수열의 극한">수열의 극한</option>
+                  <option value="미분법">미분법</option>
+                  <option value="적분법">적분법</option>
+                </optgroup>
+                <optgroup label="📊 확률과 통계 (선택)">
+                  <option value="경우의 수">경우의 수</option>
+                  <option value="확률">확률</option>
+                  <option value="통계">통계</option>
+                </optgroup>
+                <optgroup label="📐 기하 (선택)">
+                  <option value="이차곡선">이차곡선</option>
+                  <option value="평면벡터">평면벡터</option>
+                  <option value="공간도형과 공간좌표">공간도형과 공간좌표</option>
+                </optgroup>
               </select>
-              <button class="btn-primary" onclick="getBasicProblem()">🎲 문제 받기</button>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn-primary" onclick="getBasicProblems('ai')">🤖 AI 5문제</button>
+                <button class="btn-primary" onclick="getBasicProblems('db')" style="background:linear-gradient(135deg,#FF6B35,#FF9F1C);">📋 수능 기출 10문제</button>
+              </div>
             </div>
-            <div id="basicProblem" class="problem-box hidden"></div>
-            <!-- Desmos 그래프 (기하 문제일 때만 표시) -->
-            <div id="basicGraph" class="desmos-wrap hidden">
-              <div class="desmos-header">📐 그래프</div>
-              <div id="basicGraphEl" class="desmos-container"></div>
-            </div>
-            <div id="basicInput" class="hidden">
-              <input type="text" id="basicAns" placeholder="답을 입력하세요" class="text-input" />
-              <button class="btn-primary" onclick="checkBasic()">정답 확인</button>
-              <button class="btn-ghost hint-btn" onclick="getHint()">💡 힌트 보기</button>
-            </div>
+            <div id="basicProblemList" class="problem-list-wrap hidden"></div>
             <div id="basicFeedback" class="result-box hidden"></div>
           </div>
         </div>
@@ -391,8 +416,11 @@
             <div class="weak-types" id="weakTypes">
               <p class="empty-hint">성적 분석 후 약점 유형이 표시돼요</p>
             </div>
-            <button class="btn-primary" onclick="startIntensive()">🔥 집중 트레이닝 시작</button>
-            <div id="intensiveProblem" class="problem-box hidden"></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+              <button class="btn-primary" onclick="startIntensiveMulti('ai')">🤖 AI 5문제</button>
+              <button class="btn-primary" onclick="startIntensiveMulti('db')" style="background:linear-gradient(135deg,#FF6B35,#FF9F1C);">📋 수능 기출 10문제</button>
+            </div>
+            <div id="intensiveProblemList" class="problem-list-wrap hidden"></div>
             <div id="intensiveFeedback" class="result-box hidden"></div>
           </div>
         </div>
@@ -434,6 +462,45 @@
                 <span>현재 등급</span>
                 <span class="summary-val" id="currentGrade">-</span>
               </div>
+            </div>
+          </div>
+
+          <!-- 성적 예측 -->
+          <div class="stats-card span2">
+            <h3>🔮 성적 예측</h3>
+            <div id="scorePrediction" class="prediction-box">
+              <p class="empty-hint">성적 기록이 2개 이상 쌓이면 예측이 표시돼요</p>
+            </div>
+          </div>
+
+          <!-- 틀린 문제 패턴 분석 -->
+          <div class="stats-card">
+            <h3>🔍 틀린 문제 패턴</h3>
+            <div id="errorPattern" class="pattern-box">
+              <p class="empty-hint">문제를 풀면 패턴이 분석돼요</p>
+            </div>
+          </div>
+
+          <!-- 배지 시스템 -->
+          <div class="stats-card">
+            <h3>🏅 획득 배지</h3>
+            <div id="badgeList" class="badge-grid"></div>
+          </div>
+
+          <!-- 단원별 진도표 -->
+          <div class="stats-card span2">
+            <h3>📚 단원별 진도표</h3>
+            <div id="progressTable" class="progress-table"></div>
+          </div>
+
+          <!-- 오답 노트 -->
+          <div class="stats-card span2">
+            <div class="wrong-note-header">
+              <h3>📝 오답 노트</h3>
+              <span id="wrongNoteCount" class="problem-count-badge">0문제</span>
+            </div>
+            <div id="wrongNoteList" class="wrong-note-list">
+              <p class="empty-hint">틀린 문제가 자동으로 저장돼요</p>
             </div>
           </div>
         </div>
