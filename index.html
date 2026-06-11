@@ -5,6 +5,194 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>수학완성 - AI 수능 수학 학습 도우미</title>
   <link rel="stylesheet" href="style.css" />
+  <style>
+    .multi-result-box {
+      max-height: 320px;
+      overflow-y: auto;
+      border-radius: 10px;
+      margin-top: 10px;
+    }
+    .multi-result-box:not(.hidden) {
+      padding: 2px 0;
+    }
+    .check-all-btn {      width: 100%;
+      margin-top: 16px;
+      padding: 14px;
+      font-size: 1rem;
+      font-weight: 700;
+      border-radius: 12px;
+      letter-spacing: 0.02em;
+    }
+    .check-all-summary {
+      margin-top: 16px;
+      padding: 14px 18px;
+      background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(34,197,94,0.08));
+      border: 1.5px solid rgba(99,102,241,0.2);
+      border-radius: 12px;
+      font-size: 0.95rem;
+      color: var(--text1, #1e293b);
+      text-align: center;
+    }
+    .compare-summary-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .compare-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface2, #f8fafc);
+      border-radius: 10px;
+      padding: 10px 16px;
+      flex: 1;
+      min-width: 140px;
+    }
+    .compare-badge-dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .compare-badge-info strong {
+      display: block;
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--text1, #1e293b);
+    }
+    .compare-badge-info span {
+      font-size: 0.78rem;
+      color: var(--text3, #64748b);
+    }
+    /* 성적 변화 차트 탭 */
+    .chart-tab-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .chart-tab-header h3 { margin: 0; }
+    .chart-tab-btns { display: flex; gap: 6px; }
+    .chart-tab-btn {
+      background: var(--surface2, #f1f5f9);
+      border: 1.5px solid var(--border, #e2e8f0);
+      border-radius: 8px;
+      padding: 5px 14px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text3, #64748b);
+      cursor: pointer;
+      transition: all 0.18s;
+    }
+    .chart-tab-btn.active {
+      background: var(--primary, #6366f1);
+      border-color: var(--primary, #6366f1);
+      color: #fff;
+    }
+    .chart-date-label {
+      font-size: 0.75rem;
+      color: var(--text3, #94a3b8);
+      margin: 0 0 6px 2px;
+      min-height: 16px;
+    }
+    .unit-chart-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 4px;
+      flex-wrap: wrap;
+    }
+    .unit-chart-select {
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1.5px solid var(--border, #e2e8f0);
+      background: var(--surface2, #f8fafc);
+      color: var(--text1, #1e293b);
+      font-size: 0.88rem;
+      font-weight: 500;
+      cursor: pointer;
+      min-width: 180px;
+    }
+    .settings-tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 18px;
+      border-bottom: 2px solid var(--border, #e5e7eb);
+    }
+    .settings-tab {
+      background: none;
+      border: none;
+      outline: none;
+      -webkit-appearance: none;
+      appearance: none;
+      padding: 8px 20px;
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: var(--text3, #9ca3af);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: color 0.18s, border-color 0.18s;
+      box-shadow: none;
+    }
+    .settings-tab:focus,
+    .settings-tab:focus-visible {
+      outline: none;
+      box-shadow: none;
+    }
+    .settings-tab.active {
+      color: var(--primary, #6366f1);
+      border-bottom: 2px solid var(--primary, #6366f1);
+    }
+    .settings-tab:hover:not(.active) {
+      color: var(--text1, #374151);
+    }
+    .help-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      padding: 4px 0 8px;
+    }
+    .help-step {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: var(--surface2, #f8fafc);
+      border-radius: 12px;
+      padding: 12px 16px;
+    }
+    .help-step-num {
+      font-size: 1.3rem;
+      font-weight: 800;
+      color: var(--primary, #6366f1);
+      opacity: 0.85;
+      min-width: 32px;
+      font-family: 'Space Mono', monospace;
+    }
+    .help-step-body strong {
+      display: block;
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: var(--text1, #1e293b);
+      margin-bottom: 2px;
+    }
+    .help-step-body p {
+      font-size: 0.8rem;
+      color: var(--text3, #64748b);
+      margin: 0;
+      line-height: 1.4;
+    }
+    .help-step-arrow {
+      text-align: center;
+      font-size: 1rem;
+      color: var(--text3, #cbd5e1);
+      line-height: 1;
+      padding: 2px 0;
+    }
+  </style>
   <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
 
@@ -261,16 +449,6 @@
 
           <!-- 오른쪽: 설정 + 분석 버튼 -->
           <div class="analyze-right">
-            <div class="api-key-section">
-              <label class="input-label">🔑 Gemini API 키</label>
-              <div class="input-row">
-                <input type="password" id="apiKeyInput" placeholder="AIza..." class="text-input" />
-                <button class="btn-save" id="saveKeyBtn" onclick="saveApiKey()">저장</button>
-              </div>
-              <p class="input-hint">
-                <a href="https://aistudio.google.com" target="_blank">Google AI Studio</a>에서 무료로 발급받으세요
-              </p>
-            </div>
 
             <div class="analyze-options" id="examTypeWrap">
               <label class="input-label">📝 시험 유형 (선택)</label>
@@ -435,9 +613,32 @@
 
         <div class="stats-grid">
           <div class="stats-card span2">
-            <h3>📈 점수 변화 추이</h3>
-            <canvas id="scoreChart" width="600" height="200"></canvas>
-            <p class="chart-empty" id="scoreChartEmpty">성적 분석 기록이 쌓이면 그래프가 표시돼요</p>
+            <div class="chart-tab-header">
+              <h3>📈 성적 변화 추이</h3>
+              <div class="chart-tab-btns">
+                <button class="chart-tab-btn active" onclick="switchChartTab('exam')">📷 모의고사</button>
+                <button class="chart-tab-btn" onclick="switchChartTab('unit')">📚 단원별</button>
+              </div>
+            </div>
+
+            <!-- 모의고사 성적 -->
+            <div id="chartTabExam">
+              <p class="chart-date-label" id="examChartDate"></p>
+              <canvas id="scoreChart" width="600" height="220"></canvas>
+              <p class="chart-empty" id="scoreChartEmpty">성적표 업로드 후 분석하면 그래프가 표시돼요</p>
+            </div>
+
+            <!-- 단원별 성적 -->
+            <div id="chartTabUnit" style="display:none">
+              <div class="unit-chart-controls">
+                <select id="unitChartSelect" onchange="onUnitChartChange()" class="unit-chart-select">
+                  <option value="">-- 단원 선택 --</option>
+                </select>
+                <p class="chart-date-label" id="unitChartDate"></p>
+              </div>
+              <canvas id="unitChart" width="600" height="220"></canvas>
+              <p class="chart-empty" id="unitChartEmpty">단원을 선택하고 문제를 풀면 그래프가 표시돼요</p>
+            </div>
           </div>
           <div class="stats-card">
             <h3>🎯 유형별 수준</h3>
@@ -465,12 +666,15 @@
             </div>
           </div>
 
-          <!-- 성적 예측 -->
+          <!-- AI vs 기출 비교 차트 -->
           <div class="stats-card span2">
-            <h3>🔮 성적 예측</h3>
-            <div id="scorePrediction" class="prediction-box">
-              <p class="empty-hint">성적 기록이 2개 이상 쌓이면 예측이 표시돼요</p>
+            <div class="chart-tab-header">
+              <h3>🆚 AI 문제 vs 수능 기출 비교</h3>
+              <p class="chart-date-label" id="compareChartDate"></p>
             </div>
+            <div class="compare-summary-row" id="compareSummaryRow"></div>
+            <canvas id="compareChart" width="600" height="220"></canvas>
+            <p class="chart-empty" id="compareChartEmpty">문제를 풀면 비교 그래프가 표시돼요</p>
           </div>
 
           <!-- 틀린 문제 패턴 분석 -->
@@ -487,9 +691,9 @@
             <div id="badgeList" class="badge-grid"></div>
           </div>
 
-          <!-- 단원별 진도표 -->
+          <!-- 트레이닝 현황 -->
           <div class="stats-card span2">
-            <h3>📚 단원별 진도표</h3>
+            <h3>🏋️ 트레이닝 현황</h3>
             <div id="progressTable" class="progress-table"></div>
           </div>
 
@@ -513,14 +717,63 @@
   <div id="settingsModal" class="modal hidden">
     <div class="modal-box">
       <h3>⚙️ 설정</h3>
-      <label class="input-label">학생 이름</label>
-      <input type="text" id="settingName" placeholder="이름 입력" class="text-input" />
-      <label class="input-label">🔑 Gemini API 키</label>
-      <input type="password" id="settingKey" placeholder="AIza..." class="text-input" />
-      <div class="modal-actions">
-        <button class="btn-primary" onclick="saveSettings()">저장</button>
-        <button class="btn-ghost" onclick="closeModal()">닫기</button>
+
+      <!-- 탭 버튼 -->
+      <div class="settings-tabs">
+        <button class="settings-tab active" onclick="switchSettingsTab('config')">설정</button>
+        <button class="settings-tab" onclick="switchSettingsTab('help')">도움말</button>
       </div>
+
+      <!-- 설정 탭 -->
+      <div id="settingsTabConfig">
+        <label class="input-label">학생 이름</label>
+        <input type="text" id="settingName" placeholder="이름 입력" class="text-input" />
+        <div class="modal-actions">
+          <button class="btn-primary" onclick="saveSettings()">저장</button>
+          <button class="btn-ghost" onclick="closeModal()">닫기</button>
+        </div>
+      </div>
+
+      <!-- 도움말 탭 -->
+      <div id="settingsTabHelp" class="hidden">
+        <div class="help-steps">
+          <div class="help-step">
+            <div class="help-step-num">01</div>
+            <div class="help-step-body">
+              <strong>성적표 사진 촬영</strong>
+              <p>모의고사 성적표를 사진으로 찍어 업로드하세요</p>
+            </div>
+          </div>
+          <div class="help-step-arrow">↓</div>
+          <div class="help-step">
+            <div class="help-step-num">02</div>
+            <div class="help-step-body">
+              <strong>AI 수준 분석</strong>
+              <p>Gemini AI가 점수와 유형별 수준을 분석해요</p>
+            </div>
+          </div>
+          <div class="help-step-arrow">↓</div>
+          <div class="help-step">
+            <div class="help-step-num">03</div>
+            <div class="help-step-body">
+              <strong>맞춤 트레이닝</strong>
+              <p>내 수준에 맞는 문제와 학습 목표를 받아요</p>
+            </div>
+          </div>
+          <div class="help-step-arrow">↓</div>
+          <div class="help-step">
+            <div class="help-step-num">04</div>
+            <div class="help-step-body">
+              <strong>성장 확인</strong>
+              <p>점수 변화와 취약 유형 개선을 그래프로 확인해요</p>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-ghost" onclick="closeModal()">닫기</button>
+        </div>
+      </div>
+
     </div>
   </div>
 
