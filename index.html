@@ -465,6 +465,7 @@
                 <option value="확률과통계">확률과통계</option>
                 <option value="미적분">미적분</option>
                 <option value="기하">기하</option>
+                <option value="없음">없음 (공통만 · 학교 내신)</option>
               </select>
             </div>
 
@@ -577,8 +578,8 @@
                 </optgroup>
               </select>
               <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                <button class="btn-primary" onclick="getBasicProblems('ai')">🤖 AI 5문제</button>
-                <button class="btn-primary" onclick="getBasicProblems('db')" style="background:linear-gradient(135deg,#FF6B35,#FF9F1C);">📋 수능 기출 10문제</button>
+                <button class="btn-primary" onclick="getBasicProblems('ai')">🤖 AI 문제</button>
+                <button class="btn-primary" onclick="getBasicProblems('db')" style="background:linear-gradient(135deg,#FF6B35,#FF9F1C);">📋 수능 기출</button>
               </div>
             </div>
             <div id="basicProblemList" class="problem-list-wrap hidden"></div>
@@ -595,8 +596,8 @@
               <p class="empty-hint">성적 분석 후 약점 유형이 표시돼요</p>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
-              <button class="btn-primary" onclick="startIntensiveMulti('ai')">🤖 AI 5문제</button>
-              <button class="btn-primary" onclick="startIntensiveMulti('db')" style="background:linear-gradient(135deg,#FF6B35,#FF9F1C);">📋 수능 기출 10문제</button>
+              <button class="btn-primary" onclick="startIntensiveMulti('ai')">🤖 AI 3문제</button>
+              <button class="btn-primary" onclick="startIntensiveMulti('db')" style="background:linear-gradient(135deg,#FF6B35,#FF9F1C);">📋 수능 기출 3문제</button>
             </div>
             <div id="intensiveProblemList" class="problem-list-wrap hidden"></div>
             <div id="intensiveFeedback" class="result-box hidden"></div>

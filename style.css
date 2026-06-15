@@ -159,12 +159,15 @@ a:hover { text-decoration: underline; }
 .api-key-section { display: flex; flex-direction: column; gap: 8px; }
 .input-label { font-weight: 700; font-size: 0.85rem; color: var(--text2); }
 .input-row { display: flex; gap: 8px; }
-.text-input { flex: 1; background: var(--bg3); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; color: var(--text); font-family: 'Pretendard', sans-serif; font-size: 0.9rem; transition: all 0.2s; }
+.text-input { flex: 1; background: var(--bg3); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; color: var(--text); font-family: 'Pretendard', sans-serif; font-size: 0.9rem; transition: all 0.2s; -moz-appearance: textfield; appearance: textfield; }
+.text-input::-webkit-outer-spin-button, .text-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .text-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
 .input-hint { font-size: 0.78rem; color: var(--text3); }
 .select-input { width: 100%; background: var(--bg3); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; color: var(--text); font-family: 'Pretendard', sans-serif; font-size: 0.9rem; cursor: pointer; }
 .select-input:focus { outline: none; border-color: var(--accent); }
 .result-box { background: var(--bg3); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 20px; margin-top: 8px; }
+.multi-result-box { margin-top: 18px; padding: 18px; background: var(--bg2); border: 1.5px solid var(--border); border-radius: var(--radius-sm); border-top: 3px solid var(--accent); }
+.multi-result-box::before { content: '📝 채점 결과'; display: block; font-weight: 800; font-size: 0.85rem; color: var(--accent); margin-bottom: 12px; }
 .result-box h3 { font-weight: 700; margin-bottom: 12px; color: var(--text); }
 
 /* ===== TRAINING ===== */
@@ -380,7 +383,7 @@ canvas { width: 100% !important; }
 .progress-unit-name { font-size: 0.82rem; color: var(--text2); width: 130px; flex-shrink: 0; }
 .progress-unit-bar { flex: 1; height: 8px; background: var(--border); border-radius: 99px; overflow: hidden; }
 .progress-unit-fill { height: 100%; border-radius: 99px; transition: width 0.5s; }
-.progress-unit-pct { font-size: 0.75rem; color: var(--text3); width: 30px; text-align: right; }
+.progress-unit-pct { font-size: 0.75rem; color: var(--text3); width: 116px; text-align: right; flex-shrink: 0; white-space: nowrap; }
 
 /* ===== 성적 예측 ===== */
 .prediction-box { min-height: 80px; }
@@ -450,3 +453,7 @@ canvas { width: 100% !important; }
   .header { padding: 0 16px; }
   .header-nav { display: none; }
 }
+
+/* ===== 풀이/문제 박스: 높이 제한 없이 전체 펼침 (스크롤 잘림 방지) ===== */
+.multi-result-box, .result-box, .feedback-section-body, .feedback-wrap { max-height: none !important; overflow: visible !important; }
+.problem-list-wrap, .multi-problem-item, .multi-problem-card, .multi-problem-body, .multi-answer-area { max-height: none; overflow: visible; }

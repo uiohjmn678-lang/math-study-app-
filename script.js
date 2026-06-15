@@ -11,6 +11,176 @@ function getSectionFromType(type) {
   return map[type] || '';
 }
 
+// ============ 유형별 세부 출제 주제 풀 ============
+// 같은 단원 안에서 매번 똑같은 문제가 나오지 않도록 세부 주제를 랜덤으로 섞는다
+const SUBTOPIC_POOL = {
+  '수와 연산': ['거듭제곱근 계산', '지수법칙 활용', '로그의 정의와 계산', '로그의 성질', '상용로그', '거듭제곱근이 실수가 되는 조건', '지수·로그 대소 비교', '지수·로그 방정식', '지수·로그 부등식'],
+  '지수와 로그': ['지수법칙', '로그의 성질', '상용로그의 활용', '지수함수 그래프', '로그함수 그래프', '지수·로그 방정식', '지수·로그 부등식', '대소 비교'],
+  '방정식과 부등식': ['복소수의 연산', '이차방정식의 판별식', '근과 계수의 관계', '이차함수와 이차방정식', '이차부등식', '연립이차방정식', '부등식의 영역'],
+  '함수': ['함수의 정의와 그래프', '합성함수', '역함수', '유리함수', '무리함수', '함수의 평행이동·대칭이동'],
+  '수열': ['등차수열', '등비수열', '등차·등비 혼합', '시그마 합 공식', '계차수열', '수학적 귀납법', '점화식'],
+  '삼각함수': ['삼각함수의 정의', '삼각함수의 그래프', '삼각함수 사이의 관계', '사인법칙', '코사인법칙', '삼각함수의 활용'],
+  '함수의 극한과 연속': ['함수의 극한값 계산', '좌극한·우극한', '함수의 연속', '사잇값 정리'],
+  '미분': ['미분계수와 도함수', '접선의 방정식', '함수의 증가·감소', '극대·극소', '최댓값·최솟값', '방정식·부등식에의 활용', '속도와 가속도'],
+  '적분': ['부정적분', '정적분의 계산', '정적분으로 정의된 함수', '곡선과 x축 사이의 넓이', '두 곡선 사이의 넓이'],
+  '수열의 극한': ['수열의 극한값', '등비수열의 극한', '급수의 합', '등비급수'],
+  '미분법': ['여러 가지 함수의 미분', '합성함수의 미분', '음함수·매개변수 미분', '도함수의 활용', '변곡점'],
+  '적분법': ['치환적분', '부분적분', '정적분의 활용', '입체도형의 부피'],
+  '경우의 수': ['순열', '조합', '중복순열', '중복조합', '같은 것이 있는 순열', '이항정리'],
+  '확률': ['확률의 덧셈정리', '조건부확률', '독립사건', '확률의 곱셈정리'],
+  '통계': ['이산확률분포', '이항분포', '정규분포', '표본평균의 분포', '모평균의 추정'],
+  '이차곡선': ['포물선', '타원', '쌍곡선', '이차곡선의 접선'],
+  '평면벡터': ['벡터의 연산', '내적', '직선·원의 벡터방정식'],
+  '공간도형과 공간좌표': ['공간에서의 위치 관계', '정사영', '두 점 사이의 거리', '구의 방정식'],
+};
+
+// 유형 안에서 세부 주제를 랜덤으로 뽑는다 (없으면 유형명 그대로 사용)
+function pickSubtopic(type) {
+  const pool = SUBTOPIC_POOL[type];
+  if (!pool || pool.length === 0) return type;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// 강화된 문제 생성 프롬프트 빌더
+// - 세부 주제를 지정해 유형 다양화
+// - 답이 정수/간단한 분수/√형태로 깔끔하게 떨어지도록 제약
+// - AI에게 출제 후 직접 검산하도록 명시
+function buildProblemPrompt(type, opt = {}) {
+  const subtopic = pickSubtopic(type);
+  const useChoice = opt.forceChoice !== undefined ? opt.forceChoice : (Math.random() < 0.5);
+  const choiceStr = useChoice
+    ? '객관식으로 출제하고 선택지 ①②③④⑤를 본문에 포함하세요. 정답은 보기 번호(예: ③)로 적으세요.'
+    : '단답형(서술형)으로 출제하고 선택지는 넣지 마세요. 정답은 값으로 적으세요.';
+
+  return [
+    `너는 한국 수능 수학 출제위원이다. [${type}] 단원의 "${subtopic}" 주제로 수능 4점 난이도의 문제 1개를 출제하라.`,
+    ``,
+    `[필수 규칙]`,
+    `1. 출제 후 반드시 네가 직접 끝까지 풀어서 정답을 검산하라. 검산되지 않은 문제는 절대 내지 마라.`,
+    `2. 정답은 반드시 깔끔하게 떨어지는 값이어야 한다. 정수, 간단한 기약분수, 또는 √나 로그가 깔끔히 정리된 형태만 허용한다. 2^(41/24) 같이 지수가 지저분하게 남는 답은 금지한다.`,
+    `3. 출제한 문제를 다시 한번 검토해 조건 누락, 모순, 불필요한 항(예: 8^(3/3)처럼 지수가 1이 되는 무의미한 항)이 없는지 확인하라.`,
+    `4. 같은 주제라도 매번 숫자와 설정을 바꿔 새롭게 출제하라.`,
+    `5. 모든 수식은 LaTeX 형식으로 $...$ 안에 작성하라.`,
+    `6. ${choiceStr}`,
+    ``,
+    `[출력 형식 — 아래 3줄만 정확히 출력]`,
+    `문제: (문제 내용)`,
+    `정답: (검산을 마친 최종 답)`,
+    `힌트: (핵심 개념 + 풀이 방향 2~3줄, 답은 말하지 말 것. 수식 기호 $ 없이 일반 텍스트로만 적을 것)`,
+  ].join('\n');
+}
+
+// ============ 생성 결과 파싱 (정답/힌트/본문 분리) ============
+function parseProblemResult(result) {
+  const hintMatch = result.match(/힌트[：:]\s*([\s\S]+)/);
+  const hint = hintMatch ? hintMatch[1].trim() : '';
+  const answerMatch = result.match(/정답[：:]\s*([^\n]+)/);
+  const answer = answerMatch ? answerMatch[1].trim() : '';
+  const visibleText = result
+    .replace(/\n?정답[：:][\s\S]*?(?=\n힌트|$)/, '')
+    .replace(/\n?힌트[：:][\s\S]+/, '')
+    .trim();
+  return { visibleText, answer, hint };
+}
+
+// ============ 객관식 코드 필터 (형식 무결성 검사) ============
+// 객관식인데 정답 번호가 보기에 없거나, 보기가 5개 미만이거나 중복이면 형식 오류로 판단
+const CIRCLED = ['①','②','③','④','⑤'];
+function hasChoiceMarkers(text) {
+  return CIRCLED.some(c => text.includes(c));
+}
+function checkChoiceFormat(visibleText, answer) {
+  if (!hasChoiceMarkers(visibleText)) return { ok: true }; // 단답형은 통과
+  // 본문에 등장한 보기 기호 수집
+  const present = CIRCLED.filter(c => visibleText.includes(c));
+  if (present.length < 2) return { ok: false, reason: '선택지 기호가 2개 미만입니다.' };
+  // 정답이 보기 번호 형태인지 + 본문에 그 번호가 있는지
+  const ansCircle = CIRCLED.find(c => answer.includes(c));
+  const ansNumMatch = answer.match(/[1-5]/);
+  if (ansCircle) {
+    if (!visibleText.includes(ansCircle)) return { ok: false, reason: `정답 보기(${ansCircle})가 본문 선택지에 없습니다.` };
+  } else if (ansNumMatch) {
+    const idx = parseInt(ansNumMatch[0]) - 1;
+    if (idx < 0 || idx >= CIRCLED.length || !visibleText.includes(CIRCLED[idx])) {
+      return { ok: false, reason: `정답 번호(${ansNumMatch[0]})에 해당하는 선택지가 본문에 없습니다.` };
+    }
+  } else {
+    return { ok: false, reason: '객관식인데 정답이 보기 번호(①~⑤) 형태가 아닙니다.' };
+  }
+  return { ok: true };
+}
+
+// ============ AI 검증 프롬프트 (채점관 역할) ============
+function buildVerifyPrompt(visibleText, answer) {
+  return [
+    `너는 한국 수능 수학 검수관이다. 아래 문제를 출제자가 적은 정답은 참고만 하고, 네가 직접 끝까지 풀어라.`,
+    ``,
+    `[검수할 문제]`,
+    visibleText,
+    ``,
+    `[출제자가 적은 정답] ${answer}`,
+    ``,
+    `다음을 점검하라:`,
+    `1. 네가 직접 푼 답과 출제자의 정답이 일치하는가? (가장 중요)`,
+    `2. (객관식이면) 정답이 보기 ①~⑤ 안에 실제로 존재하는가?`,
+    `3. 문제에 조건 누락, 모순, 문장 잘림이 없는가?`,
+    `4. 단답형일 때만: 최종 답이 정수·기약분수·정리된 √/로그 등 깔끔한 형태인가? (객관식은 보기 중 정답만 맞으면 통과시켜라. 중간 계산이 복잡한 것은 문제 삼지 말 것.)`,
+    ``,
+    `풀이 과정을 먼저 쓴 뒤, 맨 마지막 줄에 판정을 "PASS" 또는 "FAIL" 한 단어만 단독으로 출력하라.`,
+    `FAIL이면 마지막 줄 바로 윗줄에 무엇이 어떻게 틀렸는지 한국어로 한 줄 적어라.`,
+  ].join('\n');
+}
+
+// ============ 검증된 문제 1개 생성 (자가수정 루프) ============
+// 출제 → AI검증 + 코드필터 → 통과 시 반환, 실패 시 이유를 들고 재출제 (최대 maxTries회)
+// 끝까지 실패하면 null 반환 (호출부에서 건너뜀)
+async function generateVerifiedProblem(type, opt = {}, maxTries = 4) {
+  let lastFeedback = '';
+  for (let t = 0; t < maxTries; t++) {
+    let prompt = buildProblemPrompt(type, opt);
+    if (lastFeedback) {
+      prompt += `\n\n[직전 시도가 아래 이유로 불합격했다. 반드시 이 점을 고쳐서 새로 출제하라]\n${lastFeedback}`;
+    }
+    let result;
+    try {
+      result = await callGemini(prompt, 4000);
+    } catch (e) {
+      if (e && e.isBusy) throw e; // 서버 혼잡은 재시도 낭비 말고 즉시 위로
+      continue;
+    }
+    if (!result) continue;
+
+    const parsed = parseProblemResult(result);
+    if (!parsed.visibleText || !parsed.answer) {
+      lastFeedback = '문제 또는 정답이 형식에 맞게 출력되지 않았습니다.';
+      continue;
+    }
+
+    // 1) 객관식 코드 필터 (형식)
+    const fmt = checkChoiceFormat(parsed.visibleText, parsed.answer);
+    if (!fmt.ok) { lastFeedback = fmt.reason; continue; }
+
+    // 2) AI 검증 (수학적 타당성)
+    try {
+      const verdict = await callGemini(buildVerifyPrompt(parsed.visibleText, parsed.answer), 4000);
+      const v = (verdict || '').trim();
+      const lines = v.split('\n').map(s => s.trim()).filter(Boolean);
+      const firstLine = lines[0] || '';
+      const lastLine = lines[lines.length - 1] || '';
+      const isFail = /^FAIL\b/i.test(firstLine) || /^FAIL\b/i.test(lastLine);
+      const isPass = !isFail && (/^PASS\b/i.test(firstLine) || /^PASS\b/i.test(lastLine));
+      if (isPass) return parsed; // 통과
+      lastFeedback = v.replace(/^\s*FAIL\s*/i, '').replace(/\bPASS\b|\bFAIL\b/gi, '').trim() || '검증 실패';
+    } catch (e) {
+      if (e && e.isBusy) throw e; // 검증 중 혼잡이면 즉시 위로
+      // 그 외 검증 호출 실패는 형식은 통과한 문제이므로 채택
+      return parsed;
+    }
+    await new Promise(r => setTimeout(r, 1200));
+  }
+  return null; // 끝까지 실패
+}
+
 // ===== 수학완성 - script.js =====
 // Gemini API 연동 수능 수학 AI 학습 도우미
 
@@ -181,7 +351,11 @@ const state = {
 };
 
 // ============ GEMINI API ============
-const GEMINI_URL = '/api/gemini';
+const IS_LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+const GEMINI_URL = IS_LOCAL
+  ? 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
+  : '/api/gemini';
+const LOCAL_API_KEY = 'AIzaSyDBNjushm3qaxL3a6SbUN4VI6L_QzSeijM';
 
 async function callGemini(prompt, maxTokens = 8000) {
   if (!state.apiKey) return null;
@@ -192,7 +366,8 @@ async function callGemini(prompt, maxTokens = 8000) {
   };
 
   for (let attempt = 1; attempt <= 3; attempt++) {
-    const res = await fetch(GEMINI_URL, {
+    const url = IS_LOCAL ? `${GEMINI_URL}?key=${LOCAL_API_KEY}` : GEMINI_URL;
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -200,7 +375,8 @@ async function callGemini(prompt, maxTokens = 8000) {
 
     if (res.ok) {
       const data = await res.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const rparts = data.candidates?.[0]?.content?.parts || [];
+      return rparts.filter(p => p.text && !p.thought).map(p => p.text).join('') || '';
     }
 
     const status = res.status;
@@ -209,13 +385,14 @@ async function callGemini(prompt, maxTokens = 8000) {
         await new Promise(r => setTimeout(r, 1500 * attempt));
         continue;
       }
+      // 3번 재시도 후에도 혼잡하면 식별 가능한 에러로 표시
+      const busyErr = new Error('서버가 혼잡합니다. 잠시 후 다시 시도해주세요.');
+      busyErr.isBusy = true;
+      throw busyErr;
     }
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error?.message || `API 오류 (${status})`);
   }
-}
-  const responseParts = data.candidates?.[0]?.content?.parts || [];
-  return responseParts.filter(p => p.text && !p.thought).map(p => p.text).join('') || '';
 }
 
 // ============ SPLASH ============
@@ -695,7 +872,7 @@ window.selectChoice = function(btn, choice) {
 
 // 수식 포함 텍스트를 HTML로 변환 (줄바꿈 + $ 기호 보존, 마크다운 제거)
 function mathHtml(text) {
-  return text
+  return fixVectors(text)
     .replace(/\*{1,3}([^*\n]+)\*{1,3}/g, '$1')  // **굵게**, *기울기* 제거
     .replace(/#{1,6}\s*/g, '')                    // ## 제목 제거
     .replace(/---+/g, '')                         // --- 구분선 제거
@@ -703,6 +880,70 @@ function mathHtml(text) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/\n/g, '<br/>');
+}
+
+// 풀이/분석 본문 전용: 번호 단계·수식·하위항목을 줄 단위로 분리해 간격을 줌
+// 깨진 벡터 표기 복구: 글자 뒤에 결합형 화살표(⃗ ⃖ ⃡ 등)가 붙어 두부박스(⊠)로
+// 보이는 것을 MathJax 벡터 표기로 변환. 수식 밖 \vec{}, \overrightarrow{} 도 감쌈.
+function fixVectors(text) {
+  if (text == null) return '';
+  text = String(text);
+  var A = '[\\u20D7\\u20D6\\u20E1\\u20EE\\u20EF\\u034A]'; // 결합형 화살표류
+  // 수식 밖: 구분자($)까지 새로 붙여서 변환
+  var outside = function(s) {
+    return s
+      .replace(new RegExp('([A-Za-z]{2,3})' + A, 'g'), '$\\overrightarrow{$1}$')
+      .replace(new RegExp('([A-Za-z])' + A, 'g'), '$\\vec{$1}$');
+  };
+  // 수식 안: 이미 $...$ 안이므로 구분자 없이 화살표만 변환 (중첩 $ 방지)
+  var inside = function(s) {
+    return s
+      .replace(new RegExp('([A-Za-z]{2,3})' + A, 'g'), '\\overrightarrow{$1}')
+      .replace(new RegExp('([A-Za-z])' + A, 'g'), '\\vec{$1}');
+  };
+  // 수식 구간: $$...$$, \[...\], $...$, \(...\)  (긴 것 먼저)
+  var mathRe = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\$[^$\n]*?\$|\\\([\s\S]*?\\\))/g;
+  var result = '', last = 0, m;
+  while ((m = mathRe.exec(text)) !== null) {
+    result += outside(text.slice(last, m.index));
+    result += inside(m[0]);
+    last = m.index + m[0].length;
+  }
+  result += outside(text.slice(last));
+  return result;
+}
+
+// 힌트 표시용: 이스케이프·벡터 변환 후, 짝이 안 맞는 $(깨진 수식) 정리
+function cleanHint(text) {
+  if (!text) return '';
+  let t = mathHtml(String(text));
+  if (((t.match(/\$/g) || []).length) % 2 !== 0) t = t.replace(/\$/g, '');
+  return t;
+}
+
+function richBody(text) {
+  text = fixVectors(text);
+  const esc = (s) => s
+    .replace(/\*{1,3}([^*\n]+)\*{1,3}/g, '$1')
+    .replace(/#{1,6}\s*/g, '')
+    .replace(/---+/g, '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return text.split('\n').map((line) => {
+    const t = line.trim();
+    if (t === '') return '<div style="height:8px"></div>';
+    // 1. 2. 3. 처럼 번호 매긴 단계 → 위 간격 + 강조
+    if (/^\d+[.)]\s/.test(t)) {
+      return `<div style="margin:14px 0 2px;font-weight:700;color:#2b3a67;">${esc(line)}</div>`;
+    }
+    // ▸ ㄴ - • 로 시작하는 하위 항목 → 들여쓰기 + 연한 색
+    if (/^[▸ㄴ•·\-]/.test(t)) {
+      return `<div style="margin:1px 0 1px 12px;color:var(--text2);">${esc(line)}</div>`;
+    }
+    // 일반 줄(설명·수식) → 약간의 상하 여백
+    return `<div style="margin:4px 0;">${esc(line)}</div>`;
+  }).join('');
 }
 async function runAnalyze() {
   if (!state.apiKey) { showApiKeyWarning(); return; }
@@ -746,6 +987,8 @@ async function analyzeImages() {
     subjectItems = '- 극한: 상/중/하\n- 미분: 상/중/하\n- 적분: 상/중/하';
   } else if (subjectType === '기하') {
     subjectItems = '- 이차곡선: 상/중/하\n- 벡터: 상/중/하\n- 공간도형: 상/중/하';
+  } else if (subjectType === '없음') {
+    subjectItems = '(선택과목 없음 - 학교 내신 시험이라 공통과목만 분석)';
   } else {
     subjectItems = '- 경우의 수: 상/중/하\n- 확률: 상/중/하\n- 통계: 상/중/하';
   }
@@ -776,18 +1019,39 @@ async function analyzeImages() {
 ${subjectItems}
 
 【약점 유형 TOP 3】
-(성적표에서 가장 낮은 유형 3개를 직접 작성. "코멘트", "이미지" 같은 단어 사용 금지. 아래 형식으로만)
-1. 유형명: 구체적으로 어떤 개념이 약한지 한 줄
-2. 유형명: 구체적으로 어떤 개념이 약한지 한 줄
-3. 유형명: 구체적으로 어떤 개념이 약한지 한 줄
+(가장 약한 유형 3개를 골라 아주 구체적으로 작성. "코멘트","이미지" 같은 단어 금지. 각 항목을 아래 형식 그대로, 줄바꿈까지 포함해서 자세히 작성)
+1. 유형명 (구체적인 세부 개념까지)
+   ▸ 약점 진단: 이 학생이 정확히 어느 지점에서 막히는지 2~3문장으로 구체적으로
+   ▸ 실수 원인: 왜 자꾸 틀리는지(개념 구멍 / 계산 습관 / 조건 해석 / 시간 부족 등) 1~2문장
+2. 유형명 (구체적인 세부 개념까지)
+   ▸ 약점 진단: 위와 같은 형식으로 구체적으로
+   ▸ 실수 원인: 1~2문장
+3. 유형명 (구체적인 세부 개념까지)
+   ▸ 약점 진단: 위와 같은 형식으로 구체적으로
+   ▸ 실수 원인: 1~2문장
+
+【이렇게 공부하세요】
+위에서 짚은 약점 3가지 각각에 대해, 오늘부터 바로 실천할 수 있는 해결법을 구체적으로 작성. 두루뭉술하지 말고 실제로 따라할 수 있게:
+1. (위 1번 약점) 극복법
+   ▸ 먼저 잡을 개념: 어떤 기초 개념·공식부터 다시 정리해야 하는지
+   ▸ 연습 방법: 어떤 유형을 며칠 동안 하루 몇 문제씩, 어떤 순서로 풀지 구체적으로
+   ▸ 실수 방지 팁: 문제 풀 때 체크할 점 1~2가지
+2. (위 2번 약점) 극복법
+   ▸ 먼저 잡을 개념: ...
+   ▸ 연습 방법: ...
+   ▸ 실수 방지 팁: ...
+3. (위 3번 약점) 극복법
+   ▸ 먼저 잡을 개념: ...
+   ▸ 연습 방법: ...
+   ▸ 실수 방지 팁: ...
 
 【AI 한마디 조언】
-학생 이름을 부르며 따뜻하게, 2문장으로만 작성`;
+학생 이름을 부르며 따뜻하게, 2~3문장으로 격려`;
 
   parts.push({ text: imagePrompt });
 
   try {
-    const result = await callGeminiWithParts(parts);
+    const result = await callGeminiWithParts(parts, 16000);
     document.getElementById('analyzeResultTitle').textContent = '📊 분석 결과';
     displayAnalysisResult(result);
   } catch (e) {
@@ -818,6 +1082,8 @@ async function gradeExamPdf() {
     subjectItemsPdf = '- 극한: 상/중/하 (이유 한 줄)\n- 미분: 상/중/하 (이유 한 줄)\n- 적분: 상/중/하 (이유 한 줄)';
   } else if (subjectTypePdf === '기하') {
     subjectItemsPdf = '- 이차곡선: 상/중/하 (이유 한 줄)\n- 벡터: 상/중/하 (이유 한 줄)\n- 공간도형: 상/중/하 (이유 한 줄)';
+  } else if (subjectTypePdf === '없음') {
+    subjectItemsPdf = '(선택과목 없음 - 학교 내신 시험이라 공통과목만 분석)';
   } else {
     subjectItemsPdf = '- 경우의 수: 상/중/하 (이유 한 줄)\n- 확률: 상/중/하 (이유 한 줄)\n- 통계: 상/중/하 (이유 한 줄)';
   }
@@ -848,16 +1114,34 @@ async function gradeExamPdf() {
 ${subjectItemsPdf}
 
 【약점 유형 TOP 3】
-(틀린 문제 기반으로 직접 작성. "코멘트", "이미지" 단어 사용 금지)
-1. 유형명: 어떤 개념/계산에서 틀렸는지 한 줄
-2. 유형명: 어떤 개념/계산에서 틀렸는지 한 줄
-3. 유형명: 어떤 개념/계산에서 틀렸는지 한 줄
+(틀린 문제들을 근거로, 가장 약한 유형 3개를 아주 구체적으로 작성. "코멘트","이미지" 단어 금지. 각 항목을 아래 형식 그대로, 줄바꿈까지 포함해서 자세히)
+1. 유형명 (구체적인 세부 개념까지)
+   ▸ 약점 진단: 어떤 문제의 어느 단계에서 틀렸는지 2~3문장으로 구체적으로 (틀린 문제 번호 언급 가능)
+   ▸ 실수 원인: 왜 틀렸는지(개념 구멍 / 계산 실수 / 조건 누락 등) 1~2문장
+2. 유형명 (구체적인 세부 개념까지)
+   ▸ 약점 진단: 위와 같은 형식으로 구체적으로
+   ▸ 실수 원인: 1~2문장
+3. 유형명 (구체적인 세부 개념까지)
+   ▸ 약점 진단: 위와 같은 형식으로 구체적으로
+   ▸ 실수 원인: 1~2문장
 
 【이렇게 공부하세요】
-틀린 문제 패턴을 분석해서 학생이 바로 실천할 수 있는 공부 방법 3가지를 친근하게 알려주세요.
+위에서 짚은 약점 3가지 각각에 대해, 오늘부터 바로 실천할 수 있는 해결법을 구체적으로 작성. 두루뭉술하지 말고 실제로 따라할 수 있게:
+1. (위 1번 약점) 극복법
+   ▸ 먼저 잡을 개념: 어떤 기초 개념·공식부터 다시 정리해야 하는지
+   ▸ 연습 방법: 어떤 유형을 며칠 동안 하루 몇 문제씩, 어떤 순서로 풀지 구체적으로
+   ▸ 실수 방지 팁: 문제 풀 때 체크할 점 1~2가지
+2. (위 2번 약점) 극복법
+   ▸ 먼저 잡을 개념: ...
+   ▸ 연습 방법: ...
+   ▸ 실수 방지 팁: ...
+3. (위 3번 약점) 극복법
+   ▸ 먼저 잡을 개념: ...
+   ▸ 연습 방법: ...
+   ▸ 실수 방지 팁: ...
 
 【AI 한마디】
-학생 이름을 부르며 따뜻하게, 2문장으로만 격려`;
+학생 이름을 부르며 따뜻하게, 2~3문장으로 격려`;
 
   try {
     const result = await callGeminiWithPdf(prompt, 16000);
@@ -883,6 +1167,8 @@ async function analyzeScoreFromPdf() {
     subjectItems2 = '- 극한: 상/중/하\n- 미분: 상/중/하\n- 적분: 상/중/하';
   } else if (subjectType2 === '기하') {
     subjectItems2 = '- 이차곡선: 상/중/하\n- 벡터: 상/중/하\n- 공간도형: 상/중/하';
+  } else if (subjectType2 === '없음') {
+    subjectItems2 = '(선택과목 없음 - 학교 내신 시험이라 공통과목만 분석)';
   } else {
     subjectItems2 = '- 경우의 수: 상/중/하\n- 확률: 상/중/하\n- 통계: 상/중/하';
   }
@@ -913,13 +1199,34 @@ async function analyzeScoreFromPdf() {
 ${subjectItems2}
 
 【약점 유형 TOP 3】
-(성적표에서 가장 낮은 유형 3개 직접 작성. "코멘트", "이미지" 단어 사용 금지)
-1. 유형명: 어떤 개념이 약한지 한 줄
-2. 유형명: 어떤 개념이 약한지 한 줄
-3. 유형명: 어떤 개념이 약한지 한 줄
+(성적표에서 가장 낮은 유형 3개를 아주 구체적으로 작성. "코멘트","이미지" 단어 금지. 각 항목을 아래 형식 그대로, 줄바꿈까지 포함해서 자세히)
+1. 유형명 (구체적인 세부 개념까지)
+   ▸ 약점 진단: 이 학생이 정확히 어느 지점에서 약한지 2~3문장으로 구체적으로
+   ▸ 실수 원인: 왜 점수가 낮은지(개념 구멍 / 계산 습관 / 조건 해석 / 시간 부족 등) 1~2문장
+2. 유형명 (구체적인 세부 개념까지)
+   ▸ 약점 진단: 위와 같은 형식으로 구체적으로
+   ▸ 실수 원인: 1~2문장
+3. 유형명 (구체적인 세부 개념까지)
+   ▸ 약점 진단: 위와 같은 형식으로 구체적으로
+   ▸ 실수 원인: 1~2문장
+
+【이렇게 공부하세요】
+위에서 짚은 약점 3가지 각각에 대해, 오늘부터 바로 실천할 수 있는 해결법을 구체적으로 작성. 두루뭉술하지 말고 실제로 따라할 수 있게:
+1. (위 1번 약점) 극복법
+   ▸ 먼저 잡을 개념: 어떤 기초 개념·공식부터 다시 정리해야 하는지
+   ▸ 연습 방법: 어떤 유형을 며칠 동안 하루 몇 문제씩, 어떤 순서로 풀지 구체적으로
+   ▸ 실수 방지 팁: 문제 풀 때 체크할 점 1~2가지
+2. (위 2번 약점) 극복법
+   ▸ 먼저 잡을 개념: ...
+   ▸ 연습 방법: ...
+   ▸ 실수 방지 팁: ...
+3. (위 3번 약점) 극복법
+   ▸ 먼저 잡을 개념: ...
+   ▸ 연습 방법: ...
+   ▸ 실수 방지 팁: ...
 
 【AI 한마디 조언】
-학생 이름을 부르며 따뜻하게, 2문장으로만 작성`;
+학생 이름을 부르며 따뜻하게, 2~3문장으로 작성`;
 
   try {
     const result = await callGeminiWithPdf(prompt);
@@ -1032,7 +1339,8 @@ async function callGeminiWithParts(parts, maxTokens = 8000) {
     contents: [{ parts }],
     generationConfig: { temperature: 0.7, maxOutputTokens: maxTokens }
   };
-  const res = await fetch(GEMINI_URL, {
+  const url = IS_LOCAL ? `${GEMINI_URL}?key=${LOCAL_API_KEY}` : GEMINI_URL;
+    const res = await fetch(url, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
   });
   if (!res.ok) { const err = await res.json(); throw new Error(err.error?.message || 'API 오류'); }
@@ -1154,7 +1462,7 @@ function displayAnalysisResult(text) {
 
   let html = '<div class="analysis-cards">';
   parsed.forEach(sec => {
-    const bodyHtml = mathHtml(sec.body);
+    const bodyHtml = richBody(sec.body);
     html += `
       <div class="analysis-card">
         <div class="analysis-card-title" style="color:${sec.color}">
@@ -1376,7 +1684,9 @@ window.analyzeSolveImage = async function() {
   feedback.innerHTML = '<span class="spinner"></span> AI가 풀이를 확인하고 있어요... (10~30초 소요)';
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${state.apiKey}`;
+    const url = IS_LOCAL
+      ? `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${LOCAL_API_KEY}`
+      : '/api/gemini';
     const body = {
       contents: [{
         parts: [
@@ -1403,11 +1713,12 @@ window.analyzeSolveImage = async function() {
           { inline_data: { mime_type: 'image/jpeg', data: solveImageBase64 } }
         ]
       }],
-      generationConfig: { maxOutputTokens: 4000 }
+      generationConfig: { maxOutputTokens: 8000 }
     };
     const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const data = await res.json();
-    const result = data.candidates?.[0]?.content?.parts?.[0]?.text || '분석 실패';
+    const rparts = data.candidates?.[0]?.content?.parts || [];
+    const result = rparts.filter(p => p.text && !p.thought).map(p => p.text).join('') || '분석 실패';
     const hasCorrect = result.includes('✅');
     feedback.innerHTML = `<div style="font-weight:800;font-size:1rem;margin-bottom:16px;">📝 풀이 피드백</div>` + renderFeedback(result, hasCorrect);
     renderMath(feedback);
@@ -1420,6 +1731,7 @@ window.analyzeSolveImage = async function() {
 // ============ 기본 문제 - 다중 출제 ============
 window.getBasicProblems = async function(mode) {
   if (mode === 'ai' && !state.apiKey) { showApiKeyWarning(); return; }
+  state.lastBasicMode = mode;
   const type = document.getElementById('mathType').value;
   const listWrap = document.getElementById('basicProblemList');
   listWrap.classList.remove('hidden');
@@ -1435,7 +1747,8 @@ window.getBasicProblems = async function(mode) {
       const targetSection = getSectionFromType(type);
       snap.forEach(d => {
         const item = d.data();
-        if (!targetSection || item.section === targetSection || item.section === '공통') {
+        // 선택한 단원이 속한 과목(section)의 문제만 출제. 공통은 공통 단원 선택 시에만 나옴.
+        if (!targetSection || item.section === targetSection) {
           all.push(item);
         }
       });
@@ -1443,47 +1756,51 @@ window.getBasicProblems = async function(mode) {
         listWrap.innerHTML = '<p style="color:var(--text2);padding:16px;">해당 과목의 기출 문제가 없어요.</p>';
         return;
       }
-      const shuffled = all.sort(() => Math.random() - 0.5).slice(0, 10);
+      const shuffled = all.sort(() => Math.random() - 0.5).slice(0, 1);
       renderMultiProblems(shuffled, listWrap, 'basic', 'db');
     } catch(e) {
       listWrap.innerHTML = `<span style="color:var(--red)">오류: ${e.message}</span>`;
     }
   } else {
-    // AI로 5개 순차 생성
+    // AI로 1개 생성 (출제·검증 자가수정 루프, 최대 3회)
     listWrap.innerHTML = '';
-    for (let i = 0; i < 5; i++) {
-      const itemEl = document.createElement('div');
-      itemEl.className = 'multi-problem-item';
-      itemEl.innerHTML = `<span class="spinner"></span> 문제 ${i+1}/5 생성 중...`;
-      listWrap.appendChild(itemEl);
+    const itemEl = document.createElement('div');
+    itemEl.className = 'multi-problem-item';
+    itemEl.innerHTML = `<span class="spinner"></span> 문제 출제·검증 중...`;
+    listWrap.appendChild(itemEl);
 
-      const isMultiple = Math.random() < 0.5;
-      const choiceStr = isMultiple ? '객관식 선택지 ①②③④⑤ 포함' : '서술형 선택지 없음';
-      const prompt = '수능 수학 [' + type + '] 유형 문제 1개. 수식 LaTeX $..$ 형식. ' + choiceStr + '. 형식: 문제:(내용) 정답:(답) 힌트:(핵심개념+풀이방향 2~3줄)';
-      try {
-        const result = await callGemini(prompt, 3000);
-        const hintMatch = result.match(/힌트[：:]\s*(.+)/);
-        const hint = hintMatch ? hintMatch[1] : '';
-        const visibleText = result.replace(/\n?정답[：:][\s\S]*?(?=\n힌트|$)/, '').replace(/\n?힌트[：:].+/, '').trim();
-        const answerMatch = result.match(/정답[：:]\s*([^\n]+)/);
-        const answer = answerMatch ? answerMatch[1].trim() : '';
-        itemEl.innerHTML = renderMultiProblemItem(i+1, visibleText, hint, answer, 'basic', 'ai', type);
+    try {
+      const parsed = await generateVerifiedProblem(type);
+      if (!parsed) {
+        itemEl.innerHTML = `<div style="color:var(--text2);padding:8px;">검증을 통과하는 문제를 만들지 못했어요. 다시 시도해주세요. 🔄</div>`;
+      } else {
+        itemEl.innerHTML = renderMultiProblemItem(1, parsed.visibleText, parsed.hint, parsed.answer, 'basic', 'ai', type);
         renderMath(itemEl);
-      } catch(e) {
-        itemEl.innerHTML = `<div style="color:var(--red)">문제 ${i+1} 생성 실패 (잠시 후 다시 시도해주세요)</div>`;
       }
-      if (i < 4) await new Promise(r => setTimeout(r, 2000));
+    } catch (e) {
+      const msg = (e && e.isBusy) ? '서버가 혼잡해요. 잠시 후 다시 시도해주세요. ⏳' : `출제 실패: ${e.message}`;
+      itemEl.innerHTML = `<div style="color:var(--red);padding:8px;">${msg}</div>`;
     }
     attachChoiceListeners(listWrap);
   }
-  const oldBtn = document.getElementById('checkAllBtn-basic');
-  if (oldBtn) oldBtn.remove();
+  const oldRow = document.getElementById('basicBtnRow');
+  if (oldRow) oldRow.remove();
+  const row = document.createElement('div');
+  row.id = 'basicBtnRow';
+  row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;';
   const checkAllBtn = document.createElement('button');
   checkAllBtn.id = 'checkAllBtn-basic';
   checkAllBtn.className = 'btn-primary check-all-btn';
-  checkAllBtn.innerHTML = '✅ 전체 정답 확인';
+  checkAllBtn.innerHTML = '✅ 채점하기';
   checkAllBtn.onclick = () => checkAllAnswers('basic');
-  listWrap.appendChild(checkAllBtn);
+  const moreBtn = document.createElement('button');
+  moreBtn.className = 'btn-ghost';
+  moreBtn.style.cssText = 'padding:12px 20px;border:1.5px solid var(--border);border-radius:12px;background:var(--card);color:var(--accent);font-weight:700;cursor:pointer;';
+  moreBtn.innerHTML = '🔄 다른 문제';
+  moreBtn.onclick = () => getBasicProblems(state.lastBasicMode || 'ai');
+  row.appendChild(checkAllBtn);
+  row.appendChild(moreBtn);
+  listWrap.appendChild(row);
 };
 
 
@@ -1496,6 +1813,9 @@ window.startIntensiveMulti = async function(mode) {
   listWrap.innerHTML = '<span class="spinner"></span> 문제 불러오는 중...';
   document.getElementById('intensiveFeedback').classList.add('hidden');
 
+  // 유형 집중: 3문제를 하나씩 순차 출제
+  state.intensive = { mode, type: targetType, total: 3, idx: 0, pool: [] };
+
   if (mode === 'db') {
     try {
       const db2 = getFirestore(undefined, 'math-study-app');
@@ -1504,53 +1824,115 @@ window.startIntensiveMulti = async function(mode) {
       const targetSection = getSectionFromType(targetType);
       snap.forEach(d => {
         const item = d.data();
-        if (!targetSection || item.section === targetSection || item.section === '공통') {
-          all.push(item);
-        }
+        if (!targetSection || item.section === targetSection) all.push(item);
       });
       if (all.length === 0) {
         listWrap.innerHTML = '<p style="color:var(--text2);padding:16px;">해당 유형의 기출 문제가 없어요.</p>';
         return;
       }
-      const shuffled = all.sort(() => Math.random() - 0.5).slice(0, 10);
-      renderMultiProblems(shuffled, listWrap, 'intensive', 'db');
-    } catch(e) {
+      state.intensive.pool = all.sort(() => Math.random() - 0.5).slice(0, 3);
+      state.intensive.total = state.intensive.pool.length; // 3개 미만이면 그만큼만
+    } catch (e) {
       listWrap.innerHTML = `<span style="color:var(--red)">오류: ${e.message}</span>`;
+      return;
     }
-  } else {
-    listWrap.innerHTML = '';
-    for (let i = 0; i < 5; i++) {
-      const itemEl = document.createElement('div');
-      itemEl.className = 'multi-problem-item';
-      itemEl.innerHTML = `<span class="spinner"></span> 문제 ${i+1}/5 생성 중...`;
-      listWrap.appendChild(itemEl);
+  }
+  await showIntensiveProblem();
+};
 
-      const prompt = '수능 수학 [' + targetType + '] 집중 트레이닝 문제 1개. 수식: LaTeX $..$ 형식. 객관식 ①②③④⑤ 선택지 포함. 형식: 문제:(내용) 정답:(번호) 힌트:(핵심개념+풀이방향 2~3줄)';
-      try {
-        const result = await callGemini(prompt, 3000);
-        const hintMatch = result.match(/힌트[：:]\s*(.+)/);
-        const hint = hintMatch ? hintMatch[1] : '';
-        const visibleText = result.replace(/\n?정답[：:][\s\S]*?(?=\n힌트|$)/, '').replace(/\n?힌트[：:].+/, '').trim();
-        const answerMatch = result.match(/정답[：:]\s*([^\n]+)/);
-        const answer = answerMatch ? answerMatch[1].trim() : '';
-        itemEl.innerHTML = renderMultiProblemItem(i+1, visibleText, hint, answer, 'intensive', 'ai', targetType);
+// 유형 집중: 현재 순서의 문제 한 개를 렌더
+async function showIntensiveProblem() {
+  const S = state.intensive;
+  const listWrap = document.getElementById('intensiveProblemList');
+  S.idx += 1;
+  listWrap.innerHTML = `<div style="font-weight:700;color:var(--text2);font-size:0.85rem;margin-bottom:10px;">🔥 약점 집중 · ${S.type} · ${S.idx}/${S.total}문제</div>`;
+
+  const itemEl = document.createElement('div');
+  itemEl.className = 'multi-problem-item';
+  listWrap.appendChild(itemEl);
+
+  let ok = true;
+
+  if (S.mode === 'db') {
+    const item = S.pool[S.idx - 1];
+    const nums = ['①','②','③','④','⑤'];
+    let choicesText = '';
+    if (item.choices && Array.isArray(item.choices)) {
+      choicesText = '\n\n' + item.choices.map((c, ci) => `${nums[ci] || (ci+1)} ${c}`).join('  ');
+    }
+    const subject = item.section || item.subject || '수능 기출';
+    const year = item.year || '';
+    const form = item.form ? ` (${item.form})` : '';
+    const question = item.question || item.문제 || '';
+    const answer = String(item.answer_index || item.정답 || item.answer || '');
+    const text = `${question}${choicesText}`;
+    itemEl.innerHTML = renderMultiProblemItem(S.idx, text, '', answer, 'intensive', 'db', subject, year + form);
+    renderMath(itemEl);
+    attachChoiceListeners(listWrap);
+  } else {
+    itemEl.innerHTML = `<span class="spinner"></span> 문제 출제·검증 중...`;
+    try {
+      const parsed = await generateVerifiedProblem(S.type, { forceChoice: true });
+      if (!parsed) {
+        ok = false;
+        itemEl.innerHTML = `<div style="color:var(--text2);padding:8px;">검증을 통과하는 문제를 만들지 못했어요. 다시 시도하거나, 수능 기출로 풀어보세요. 🔄</div>`;
+      } else {
+        itemEl.innerHTML = renderMultiProblemItem(S.idx, parsed.visibleText, parsed.hint, parsed.answer, 'intensive', 'ai', S.type);
         renderMath(itemEl);
-      } catch(e) {
-        itemEl.innerHTML = `<div style="color:var(--red)">문제 ${i+1} 생성 실패 (잠시 후 다시 시도해주세요)</div>`;
       }
-      if (i < 4) await new Promise(r => setTimeout(r, 2000));
+    } catch (e) {
+      ok = false;
+      const msg = (e && e.isBusy) ? '서버가 혼잡해요. 잠시 후 다시 시도해주세요. ⏳' : `출제 실패: ${e.message}`;
+      itemEl.innerHTML = `<div style="color:var(--red);padding:8px;">${msg}</div>`;
     }
     attachChoiceListeners(listWrap);
   }
-  const oldBtn2 = document.getElementById('checkAllBtn-intensive');
-  if (oldBtn2) oldBtn2.remove();
-  const checkAllBtn2 = document.createElement('button');
-  checkAllBtn2.id = 'checkAllBtn-intensive';
-  checkAllBtn2.className = 'btn-primary check-all-btn';
-  checkAllBtn2.innerHTML = '✅ 전체 정답 확인';
-  checkAllBtn2.onclick = () => checkAllAnswers('intensive');
-  listWrap.appendChild(checkAllBtn2);
-};
+
+  const btn = document.createElement('button');
+  btn.id = 'intensiveStepBtn';
+  btn.className = 'btn-primary check-all-btn';
+  if (ok) {
+    btn.innerHTML = '✅ 채점하기';
+    btn.onclick = () => gradeIntensiveStep(btn);
+  } else {
+    // 출제 실패 → 같은 순서 다시 출제 (idx 되돌림)
+    btn.innerHTML = '🔄 다시 출제';
+    btn.onclick = () => { S.idx -= 1; showIntensiveProblem(); };
+  }
+  listWrap.appendChild(btn);
+}
+
+// 유형 집중: 현재 문제 채점 → 다음 문제 / 완료
+async function gradeIntensiveStep(btn) {
+  const S = state.intensive;
+  const listWrap = document.getElementById('intensiveProblemList');
+  const card = listWrap.querySelector('.multi-problem-card');
+  if (!card) return;
+  const selected = card.querySelector('.choice-btn.selected');
+  const textInput = card.querySelector('.multi-ans-input');
+  if (!selected && !(textInput && textInput.value.trim())) {
+    showInfoModal('✏️ 미입력', '답을 먼저 입력해주세요!');
+    return;
+  }
+  if (!state.apiKey) { showApiKeyWarning(); return; }
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 채점 중...';
+  await doCheckAnswer(card, 'intensive');
+  btn.disabled = false;
+
+  if (S.idx < S.total) {
+    btn.innerHTML = '다음 문제 →';
+    btn.onclick = () => showIntensiveProblem();
+  } else {
+    btn.innerHTML = '🎉 3문제 완료!';
+    btn.disabled = true;
+    const again = document.createElement('button');
+    again.style.cssText = 'margin-top:8px;padding:12px 20px;border:1.5px solid var(--border);border-radius:12px;background:var(--card);color:var(--accent);font-weight:700;cursor:pointer;display:block;width:100%;';
+    again.innerHTML = '🔄 다시 풀기';
+    again.onclick = () => startIntensiveMulti(S.mode);
+    listWrap.appendChild(again);
+  }
+}
 
 // ============ 다중 문제 공통 렌더러 ============
 function renderMultiProblems(items, wrap, section, mode) {
@@ -1581,14 +1963,14 @@ function renderMultiProblems(items, wrap, section, mode) {
 function renderMultiProblemItem(idx, text, hint, answer, section, mode, type, extra) {
   const extraLabel = extra ? `<span style="font-size:0.8rem;color:var(--text3);margin-left:8px;">${extra}</span>` : '';
   return `
-    <div class="multi-problem-card" data-answer="${answer}" data-hint="${hint.replace(/"/g,"'")}" data-source="${mode}" data-idx="${idx}" data-type="${type || ''}">
+    <div class="multi-problem-card" data-answer="${answer}" data-hint="${hint.replace(/"/g,"'")}" data-problem="${encodeURIComponent(text || '')}" data-source="${mode}" data-idx="${idx}" data-type="${type || ''}">
       <div class="multi-problem-header">
         <span class="multi-problem-num">문제 ${idx}</span>
         <span style="font-size:0.82rem;color:var(--text2);">${type || ''}${extraLabel}</span>
       </div>
       <div class="multi-problem-body">${renderProblemHTML(text)}</div>
       <div class="multi-answer-area" id="ans-area-${section}-${idx}">
-        ${text.includes('①') ? '' : `<input type="text" class="text-input multi-ans-input" placeholder="답 입력" data-idx="${idx}" data-section="${section}" style="margin-top:8px;" />`}
+        ${hasChoiceMarkers(text) ? '' : `<input type="text" inputmode="text" class="text-input multi-ans-input" placeholder="답 입력" data-idx="${idx}" data-section="${section}" style="margin-top:8px;" />`}
         ${hint ? `<div style="margin-top:8px;"><button class="btn-ghost hint-btn" style="padding:8px 12px;font-size:0.85rem;" onclick="showMultiHint(this)">💡 힌트</button></div>` : ''}
         <div class="multi-result-box hidden" id="result-${section}-${idx}"></div>
       </div>
@@ -1608,7 +1990,7 @@ function attachChoiceListeners(wrap) {
 window.showMultiHint = function(btn) {
   const card = btn.closest('.multi-problem-card');
   const hint = card.dataset.hint;
-  if (hint) showInfoModal('💡 힌트', hint);
+  if (hint) showInfoModal('💡 힌트', cleanHint(hint));
 };
 
 // 공용 채점 함수 (카드 하나)
@@ -1626,14 +2008,15 @@ async function doCheckAnswer(card, section) {
   resultBox.classList.remove('hidden');
   resultBox.innerHTML = '<span class="spinner"></span> 채점 중...';
 
-  const problemText = card.querySelector('.multi-problem-body').innerText;
-  const verdict = isCorrect ? '✅ 정답' : '❌ 오답';
-  const prompt = `문제: ${problemText}\n정답: ${correctAnswer}\n학생 답: ${userAns}\n\n마크다운 기호 금지. 수식은 $...$ 형식.\n\n첫 줄에 판정만 써주세요: 정답이면 정확히 "✅ 정답", 오답이면 정확히 "❌ 오답"\n\n📋 풀이\n(단계별, 번호 사용. 각 단계 사이 빈 줄. 수식은 $...$ LaTeX 형식)\n\n∴ 최종 답: ${correctAnswer}\n\n💡 핵심 팁\n(한 줄)`;
+  const problemText = card.dataset.problem
+    ? decodeURIComponent(card.dataset.problem)
+    : card.querySelector('.multi-problem-body').innerText;
+  const prompt = `문제: ${problemText}\n정답: ${correctAnswer}\n학생 답: ${userAns}\n\n★ 이 문제의 정답은 [${correctAnswer}]로 확정되어 있다. 절대 "문제가 잘못됐다", "정답이 다르다"고 하지 말고, 반드시 [${correctAnswer}]가 나오도록 자연스럽게 풀이할 것. 만약 풀이가 막히면 접근을 바꿔서라도 정답에 맞춰 설명할 것.\n\n마크다운 기호(#, * 등) 금지. 모든 수식은 $...$ LaTeX 형식. 벡터는 \\overrightarrow{} 사용.\n\n첫 줄에 판정만: 학생 답이 정답과 같으면 정확히 "✅ 정답", 다르면 정확히 "❌ 오답"\n\n🎯 핵심\n(이 문제를 푸는 핵심 아이디어·개념이 무엇인지 1~2문장으로 짧게. 실수 얘기는 빼고 풀이의 열쇠만.)\n\n📋 자세한 풀이\n(단계별 번호. 각 단계는 한두 문장으로 간결하게. 핵심 계산만 보여주고 뻔한 중간 과정은 생략. 전체 6단계 이내로 압축. 최종적으로 반드시 [${correctAnswer}]가 나와야 함.)\n\n💡 핵심 팁\n(핵심과 겹치지 말 것. 이 유형에서 학생들이 자주 하는 실수나 헷갈리는 함정 1~2줄만.)\n\n∴ 최종 답: ${correctAnswer}`;
 
   try {
     const result = await callGemini(prompt);
     const isCorrect = result.includes('✅ 정답') && !result.includes('❌ 오답');
-    resultBox.innerHTML = renderFeedback(result, isCorrect);
+    resultBox.innerHTML = renderFeedback(result, isCorrect, true);
     renderMath(resultBox);
     const type = card.dataset.type || card.querySelector('[style*="text2"]')?.textContent || '';
     const source = card.dataset.source === 'db' ? 'suneung' : 'ai';
@@ -1891,7 +2274,7 @@ async function getBasicProblem() {
 문제: (문제 내용)
 ${choiceType}
 정답: (숫자나 간단한 답)
-힌트: (핵심 개념 + 첫 번째 풀이 방향 2~3줄. 어떤 공식/개념을 쓰는지 명시)
+힌트: (핵심 개념 + 첫 번째 풀이 방향 2~3줄. 어떤 공식/개념을 쓰는지 명시. 수식 기호 $ 없이 일반 텍스트로만 적을 것)
 
 좌표, 원, 직선, 포물선, 타원, 쌍곡선, 벡터, 삼각형 등 그래프 표현 가능한 문제라면 반드시 DESMOS 블록 포함:
 DESMOS_START
@@ -2008,6 +2391,7 @@ function showInfoModal(title, message) {
       <button onclick="document.getElementById('infoModal').remove()" style="margin-top:20px;width:100%;background:linear-gradient(135deg,#4A90E2,#6B7EC9);color:#fff;border:none;border-radius:10px;padding:11px;font-size:0.95rem;font-weight:700;cursor:pointer;">확인</button>
     </div>`;
   document.body.appendChild(modal);
+  renderMath(modal); // 모달 안의 LaTeX 수식 렌더
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 }
 window.showInfoModal = showInfoModal;
@@ -2022,7 +2406,7 @@ function getHint() {
   modal.innerHTML = `
     <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:480px;width:90%;box-shadow:0 8px 32px rgba(74,144,226,0.18);position:relative;">
       <div style="font-size:1.1rem;font-weight:800;color:#4A90E2;margin-bottom:14px;">💡 힌트</div>
-      <div id="hintModalBody" style="font-size:0.95rem;color:#1a2340;line-height:1.9;">${state.currentHint}</div>
+      <div id="hintModalBody" style="font-size:0.95rem;color:#1a2340;line-height:1.9;">${cleanHint(state.currentHint)}</div>
       <button onclick="document.getElementById('hintModal').remove()" style="margin-top:20px;width:100%;background:linear-gradient(135deg,#4A90E2,#6B7EC9);color:#fff;border:none;border-radius:10px;padding:11px;font-size:0.95rem;font-weight:700;cursor:pointer;">확인</button>
     </div>`;
   document.body.appendChild(modal);
@@ -2143,77 +2527,90 @@ async function checkIntensive() {
   }
 }
 window.checkIntensive = checkIntensive;
-function renderFeedback(raw, isCorrect) {
-  // 마크다운 제거
+function renderFeedback(raw, isCorrect, compact = false) {
   const text = raw
     .replace(/#{1,6}\s*/g, '')
     .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')
     .trim();
 
-  // 정답 파싱
   const answerMatch = text.match(/^정답[：:]\s*(.+)$/m);
   const answerText = answerMatch ? answerMatch[1].trim() : '';
   const verdict = isCorrect
     ? `<div class="feedback-verdict correct">✅ 정답!${answerText ? ` <span style="font-size:0.9rem;opacity:0.85">(${answerText})</span>` : ''}</div>`
     : `<div class="feedback-verdict wrong">❌ 오답${answerText ? ` <span style="font-size:0.9rem;opacity:0.85">— 정답: ${answerText}</span>` : ''}</div>`;
 
-  // 섹션 파싱
+  // collapse:true 인 섹션은 compact 모드에서 "자세한 풀이 보기" 토글 안으로 들어감
   const sectionMap = [
-    { icon: '✅', label: '잘한 점', color: '#34C759' },
-    { icon: '🔧', label: '개선할 점', color: '#FF9500' },
-    { icon: '📋', label: '풀이', color: '#4A90E2' },
-    { icon: '💡', label: '핵심 팁', color: '#5856D6' },
+    { icon: '🎯', label: '핵심', color: '#4A90E2', collapse: false },
+    { icon: '✅', label: '잘한 점', color: '#34C759', collapse: false },
+    { icon: '🔧', label: '개선할 점', color: '#FF9500', collapse: false },
+    { icon: '📋', label: '자세한 풀이', color: '#4A90E2', collapse: true },
+    { icon: '📋', label: '풀이', color: '#4A90E2', collapse: true },
+    { icon: '💡', label: '핵심 팁', color: '#5856D6', collapse: true },
   ];
 
+  const sectionHtml = (sec, bodyHtml) => `
+      <div class="feedback-section">
+        <div class="feedback-section-title" style="color:${sec.color}">
+          ${sec.icon} ${sec.label}
+        </div>
+        <div class="feedback-section-body" style="line-height:2;">${bodyHtml}</div>
+      </div>`;
+
   const lines = text.split('\n');
-  let sectionsHtml = '';
+  const blocks = [];      // { collapse, html }
+  let finalBody = '';
   let currentSection = null;
   let currentLines = [];
 
   const flush = () => {
     if (!currentSection) return;
-    // ∴ 줄 분리해서 처리
-    const plainLines = [];
-    const finalLines = [];
-    let hasFinal = false;
+    const plain = [];
     currentLines.forEach(l => {
-      if (l.startsWith('∴')) { hasFinal = true; finalLines.push(l); }
-      else { plainLines.push(l); }
+      if (l.trim().startsWith('∴')) finalBody += (finalBody ? ' ' : '') + l.trim();
+      else plain.push(l);
     });
-    const body = plainLines.filter(l => l.trim()).join('\n').trim();
-    const finalBody = finalLines.join(' ').trim();
-    if (!body && !finalBody) return;
-    let html = '';
-    if (body) html += mathHtml(body);
-    if (finalBody) html += `<div style="margin-top:12px;padding:10px 14px;background:rgba(74,144,226,0.1);border-left:3px solid #4A90E2;border-radius:6px;font-weight:700;color:#1a2340;">${mathHtml(finalBody)}</div>`;
-    sectionsHtml += `
-      <div class="feedback-section">
-        <div class="feedback-section-title" style="color:${currentSection.color}">
-          ${currentSection.icon} ${currentSection.label}
-        </div>
-        <div class="feedback-section-body" style="line-height:2;">${html}</div>
-      </div>`;
+    const body = plain.filter(l => l.trim()).join('\n').trim();
+    if (body) blocks.push({ collapse: currentSection.collapse, html: sectionHtml(currentSection, richBody(body)) });
     currentLines = [];
   };
 
   lines.forEach(line => {
     const matched = sectionMap.find(s => line.includes(s.icon) && line.includes(s.label));
-    if (matched) {
-      flush();
-      currentSection = matched;
-    } else if (currentSection && !line.match(/^판정:/) && !line.match(/^정답:/)) {
-      currentLines.push(line);
-    }
+    if (matched) { flush(); currentSection = matched; }
+    else if (currentSection && !line.match(/^판정:/) && !line.match(/^정답:/)) currentLines.push(line);
   });
   flush();
 
-  if (!sectionsHtml) {
-    sectionsHtml = `<div class="feedback-section-body" style="padding:0">${mathHtml(text)}</div>`;
+  // 섹션 파싱 실패 → 통째로 표시
+  if (blocks.length === 0 && !finalBody) {
+    return `<div class="feedback-wrap">${verdict}<div class="feedback-section-body" style="padding:0">${richBody(text)}</div></div>`;
+  }
+
+  const finalBox = finalBody
+    ? `<div style="margin-top:12px;padding:10px 14px;background:rgba(74,144,226,0.1);border-left:3px solid #4A90E2;border-radius:6px;font-weight:700;color:#1a2340;">${mathHtml(finalBody)}</div>`
+    : '';
+
+  let sectionsHtml;
+  if (compact) {
+    const alwaysHtml = blocks.filter(b => !b.collapse).map(b => b.html).join('');
+    const collapseBlocks = blocks.filter(b => b.collapse);
+    let detailsHtml = '';
+    if (collapseBlocks.length) {
+      const inner = collapseBlocks.map(b => b.html).join('');
+      detailsHtml = `
+      <details class="feedback-details">
+        <summary style="cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:9px 16px;border:1.5px solid var(--border);border-radius:10px;font-weight:700;font-size:0.85rem;color:var(--accent);background:var(--card);">📖 자세한 풀이 보기</summary>
+        <div style="margin-top:6px;">${inner}</div>
+      </details>`;
+    }
+    sectionsHtml = alwaysHtml + finalBox + detailsHtml;
+  } else {
+    sectionsHtml = blocks.map(b => b.html).join('') + finalBox;
   }
 
   return `<div class="feedback-wrap">${verdict}${sectionsHtml}</div>`;
 }
-
 // ============ 커리큘럼 → 오늘의 목표 연계 ============
 function applyTodayGoal() {
   if (!state.curriculum) return;
@@ -2343,7 +2740,7 @@ function renderWrongNotes() {
         <span class="wrong-note-date">${n.date}</span>
         ${n.retried ? '<span class="wrong-retried-badge">✅ 재도전 완료</span>' : ''}
       </div>
-      <div class="wrong-note-problem math-problem">${mathHtml(n.problem.replace(/DESMOS_START[\s\S]*?DESMOS_END/g,"").trim().substring(0,120))}...</div>
+      <div class="wrong-note-problem math-problem">${mathHtml(n.problem.replace(/DESMOS_START[\s\S]*?DESMOS_END/g,"").replace(/\s*\n\s*/g," ").trim().substring(0,120))}...</div>
       <div class="wrong-note-ans">
         <span style="color:var(--red)">내 답: ${escapeHtml(n.myAnswer)}</span>
         &nbsp;→&nbsp;
@@ -2358,26 +2755,41 @@ window.retryWrongNote = function(idx) {
   const note = notes[idx];
   if (!note) return;
   navigateTo('training');
-  switchTab('solve');
-  const problemBox = document.getElementById('solveProblem');
-  if (problemBox) {
-    state.currentProblem = note.problem;
-    const cleanProblem = note.problem.replace(/DESMOS_START[\s\S]*?DESMOS_END/g, '').trim();
-    problemBox.innerHTML = `<strong>📝 오답 재도전 [${note.type}]</strong><br/><br/>${mathHtml(cleanProblem)}`;
-    problemBox.classList.remove('hidden');
-    renderMath(problemBox);
-    // 그래프 다시 그리기
-    const retryExprs = parseDesmosExpressions(note.problem);
-    if (retryExprs.length > 0) {
-      renderDesmos('solveGraphEl', 'solveGraph', retryExprs);
-    } else {
-      document.getElementById('solveGraph')?.classList.add('hidden');
-    }
-    document.getElementById('solveInput')?.classList.remove('hidden');
-    notes[idx].retried = true;
-    localStorage.setItem('wrong_notes', JSON.stringify(notes));
-    try { saveToFirestore('data/wrong_notes', { notes }); } catch(e) {}
-  }
+  switchTab('basic');
+  const listWrap = document.getElementById('basicProblemList');
+  if (!listWrap) return;
+  listWrap.classList.remove('hidden');
+  document.getElementById('basicFeedback')?.classList.add('hidden');
+
+  const cleanProblem = (note.problem || '').replace(/DESMOS_START[\s\S]*?DESMOS_END/g, '').trim();
+
+  // 오답 재도전 배너 + 형식에 맞는 단일 카드(객관식=보기버튼, 단답=입력칸)
+  listWrap.innerHTML = `<div style="margin-bottom:10px;padding:8px 12px;background:rgba(74,144,226,0.1);border-radius:8px;font-weight:700;color:var(--accent);font-size:0.88rem;">📝 오답 재도전${note.type ? ' · ' + note.type : ''}</div>`;
+  const itemEl = document.createElement('div');
+  itemEl.className = 'multi-problem-item';
+  itemEl.innerHTML = renderMultiProblemItem(1, cleanProblem, '', note.correctAnswer || '', 'basic', 'ai', note.type || '');
+  listWrap.appendChild(itemEl);
+  renderMath(itemEl);
+  attachChoiceListeners(listWrap);
+
+  // 채점 버튼
+  const oldRow = document.getElementById('basicBtnRow');
+  if (oldRow) oldRow.remove();
+  const row = document.createElement('div');
+  row.id = 'basicBtnRow';
+  row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;';
+  const checkBtn = document.createElement('button');
+  checkBtn.id = 'checkAllBtn-basic';
+  checkBtn.className = 'btn-primary check-all-btn';
+  checkBtn.innerHTML = '✅ 채점하기';
+  checkBtn.onclick = () => checkAllAnswers('basic');
+  row.appendChild(checkBtn);
+  listWrap.appendChild(row);
+
+  // 재도전 완료 표시
+  notes[idx].retried = true;
+  localStorage.setItem('wrong_notes', JSON.stringify(notes));
+  try { saveToFirestore('data/wrong_notes', { notes }); } catch(e) {}
 };
 
 // ============ 단원별 진도표 ============
@@ -2394,18 +2806,25 @@ function renderProgressTable() {
   const el = document.getElementById('progressTable');
   if (!el) return;
   const progress = JSON.parse(localStorage.getItem('unit_progress') || '{}');
+  const unitHist = JSON.parse(localStorage.getItem('unit_score_history') || '{}');
   el.innerHTML = MATH_UNITS.map(subj => `
     <div class="progress-subject">
       <div class="progress-subject-name">${subj.subject}</div>
       <div class="progress-units">
         ${subj.units.map(unit => {
-          const done = progress[unit] || 0;
-          const pct = Math.min(done * 20, 100);
-          const color = pct >= 80 ? 'var(--green)' : pct >= 40 ? 'var(--accent)' : '#FF9500';
+          const hist = unitHist[unit] || [];
+          let correct = 0, total = 0;
+          hist.forEach(e => { correct += (e.correct || 0); total += (e.total || 0); });
+          const hasAcc = total > 0;
+          const solved = hasAcc ? total : (progress[unit] || 0);
+          const acc = hasAcc ? Math.round(correct / total * 100) : 0;
+          const pct = hasAcc ? acc : 0;
+          const color = !hasAcc ? '#cbd5e1' : (acc >= 80 ? 'var(--green)' : acc >= 40 ? 'var(--accent)' : '#FF9500');
+          const label = hasAcc ? `정답률 ${acc}% · ${solved}회` : (solved > 0 ? `${solved}회` : '0회');
           return `<div class="progress-unit">
             <span class="progress-unit-name">${unit}</span>
             <div class="progress-unit-bar"><div class="progress-unit-fill" style="width:${pct}%;background:${color}"></div></div>
-            <span class="progress-unit-pct">${done}회</span>
+            <span class="progress-unit-pct">${label}</span>
           </div>`;
         }).join('')}
       </div>
@@ -2657,6 +3076,14 @@ function updateStatsPage() {
   initUnitChartSelect();
 }
 
+function hexToRgba(hex, a) {
+  const m = String(hex).replace('#', '');
+  const r = parseInt(m.substring(0, 2), 16);
+  const g = parseInt(m.substring(2, 4), 16);
+  const b = parseInt(m.substring(4, 6), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
 function drawCompareChart() {
   const canvas = document.getElementById('compareChart');
   const empty = document.getElementById('compareChartEmpty');
@@ -2737,7 +3164,7 @@ function drawCompareChart() {
   });
 
   // 두 데이터셋 공통 그리기
-  function drawLine(history, color, label) {
+  function drawLine(history, color, labelBelow) {
     if (!history || history.length === 0) return;
     const sorted = [...history].sort((a, b) => a.date.localeCompare(b.date));
     const pts = allDates.map(date => {
@@ -2754,10 +3181,10 @@ function drawCompareChart() {
 
     if (pts.length === 0) return;
 
-    // 그라데이션
+    // 그라데이션 (옅은 면 채우기)
     const grad = ctx.createLinearGradient(0, padT, 0, h - padB);
-    grad.addColorStop(0, color.replace(')', ',0.2)').replace('rgb', 'rgba'));
-    grad.addColorStop(1, color.replace(')', ',0)').replace('rgb', 'rgba'));
+    grad.addColorStop(0, hexToRgba(color, 0.16));
+    grad.addColorStop(1, hexToRgba(color, 0));
 
     if (pts.length > 1) {
       ctx.beginPath();
@@ -2768,18 +3195,18 @@ function drawCompareChart() {
       ctx.fillStyle = grad; ctx.fill();
 
       ctx.beginPath();
-      ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = 'round';
       pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
       ctx.stroke();
     }
 
     pts.forEach(p => {
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
       ctx.fillStyle = color; ctx.fill();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.fillStyle = '#1e293b'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(p.acc + '%', p.x, p.y - 10);
+      ctx.fillStyle = color; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(p.acc + '%', p.x, labelBelow ? p.y + 16 : p.y - 9);
     });
   }
 
@@ -2793,8 +3220,8 @@ function drawCompareChart() {
     ctx.fillStyle = 'rgba(100,116,139,0.9)'; ctx.fillText(label, lx + 13, ly + 4);
   });
 
-  drawLine(ai.history, '#6366f1', 'AI 문제');
-  drawLine(su.history, '#22c55e', '수능 기출');
+  drawLine(ai.history, '#6366f1', false);
+  drawLine(su.history, '#22c55e', true);
 }
 
 function drawScoreChart() {
