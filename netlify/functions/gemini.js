@@ -1,4 +1,4 @@
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent';
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 exports.handler = async (event) => {
   const headers = {
@@ -18,6 +18,7 @@ exports.handler = async (event) => {
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
+    console.log('GEMINI_API_KEY 환경변수가 없음');
     return { statusCode: 500, headers, body: JSON.stringify({ error: 'API key not configured on server' }) };
   }
 
@@ -29,9 +30,13 @@ exports.handler = async (event) => {
     });
 
     const data = await response.text();
+    if (!response.ok) {
+      console.log('Gemini 응답 오류', response.status, 'URL:', GEMINI_URL, '본문:', data.slice(0, 600));
+    }
     return { statusCode: response.status, headers, body: data };
 
   } catch (err) {
+    console.log('함수 예외:', err.message);
     return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
   }
 };
