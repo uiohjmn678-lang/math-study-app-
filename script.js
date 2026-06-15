@@ -354,7 +354,7 @@ const state = {
 const IS_LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const GEMINI_URL = IS_LOCAL
   ? 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
-  : '/api/gemini';
+  : '/.netlify/functions/gemini';
 const LOCAL_API_KEY = 'AIzaSyDBNjushm3qaxL3a6SbUN4VI6L_QzSeijM';
 
 async function callGemini(prompt, maxTokens = 8000) {
@@ -1686,7 +1686,7 @@ window.analyzeSolveImage = async function() {
   try {
     const url = IS_LOCAL
       ? `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${LOCAL_API_KEY}`
-      : '/api/gemini';
+      : '/.netlify/functions/gemini';
     const body = {
       contents: [{
         parts: [
