@@ -630,6 +630,17 @@ mjx-container:not([display="true"]) {
   overflow-y: hidden;
   vertical-align: -0.35em;             /* inline-block + overflow 는 기준선이 바닥으로 가서 보정 */
   -webkit-overflow-scrolling: touch;
+  /* ★ 스크롤바 자체를 숨긴다 (스크롤 기능은 그대로 남는다)
+     MathJax 는 수식 폭을 24.44px 처럼 소수점으로 잡는다. 윈도우 크롬은 이걸
+     clientWidth 24 로 반올림하면서 "0.44px 넘쳤다"고 보고 스크롤바를 그린다.
+     그 결과 보기 ①~⑤ 의 '0', '-2' 같은 짧은 수식 아래에까지 ◀▶ 화살표가 붙었다.
+     맥·아이폰은 겹쳐 뜨는 스크롤바라 아무 문제가 없어서 눈에 안 띄었다.
+     숨겨도 손가락으로 밀기·Shift+휠은 그대로 되므로 긴 수식은 여전히 볼 수 있다. */
+  scrollbar-width: none;               /* 파이어폭스 */
+  -ms-overflow-style: none;            /* 구형 엣지 */
+}
+mjx-container:not([display="true"])::-webkit-scrollbar {
+  display: none;                       /* 크롬·사파리 */
 }
 /* 긴 토막이 단어 단위로 안 끊겨 넘치는 경우까지 막는다 */
 .feedback-section-body, .result-box, .multi-result-box, .multi-problem-body {
