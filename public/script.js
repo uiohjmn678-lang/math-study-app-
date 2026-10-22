@@ -2903,6 +2903,9 @@ function attachChoiceListeners(wrap) {
       this.classList.add('selected');
     });
   });
+  // 주관식 입력칸에만 손글씨 UI를 붙인다.
+  // (객관식 카드는 입력칸 자체가 만들어지지 않으므로 자연히 제외된다)
+  wrap.querySelectorAll('.multi-ans-input').forEach((el) => attachHandwriting(el));
 }
 
 window.showMultiHint = function(btn) {
@@ -3347,8 +3350,10 @@ DESMOS_END
     // 선택지 있으면 입력창 숨기기
     const hasChoices = visibleText.includes('①');
     document.getElementById('basicInput').classList.remove('hidden');
-    document.getElementById('basicAns').style.display = hasChoices ? 'none' : '';
-    document.getElementById('basicAns').value = '';
+    const bAns = document.getElementById('basicAns');
+    bAns.value = '';
+    attachHandwriting(bAns);                     // 손글씨 UI (이미 붙었으면 그냥 넘어감)
+    setAnswerInputVisible(bAns, !hasChoices);    // 객관식이면 입력칸과 손글씨를 같이 숨긴다
     selectedChoice = '';
   } catch (e) {
     problemBox.innerHTML = `<span style="color:var(--red)">오류: ${e.message}</span>`;
@@ -3490,10 +3495,14 @@ async function startIntensive() {
     }
     inputArea.innerHTML = hasChoices
       ? `<button class="btn-primary" onclick="checkIntensive()">✅ 정답 확인</button>`
-      : `<div style="display:flex;gap:10px;margin-top:12px">
+      : `<div class="ans-row" style="display:flex;gap:10px;margin-top:12px">
           <input type="text" id="intensiveAns" class="text-input" placeholder="답 입력" />
           <button class="btn-primary" onclick="checkIntensive()">확인</button>
         </div>`;
+    if (!hasChoices) {
+      const iAns = document.getElementById('intensiveAns');
+      attachHandwriting(iAns, iAns.closest('.ans-row'));   // flex 줄 아래에 붙인다
+    }
     selectedChoice = '';
   } catch (e) {
     problemBox.innerHTML = `<span style="color:var(--red)">오류: ${e.message}</span>`;
@@ -4359,26 +4368,64 @@ function drawScoreChart() {
   });
 }
 
+// ============ 유형별 수준 ============
+// ★ 예전에는 퍼센트를 Math.random() 으로 지어냈다. 풀지 않아도 숫자가 떴고
+//   새로고침할 때마다 값이 바뀌었다. 진단을 내세우는 서비스에서 가장 위험한 버그였다.
+//   지금은 진도표와 똑같이 unit_score_history(실제 채점 기록)로 계산하고,
+//   푼 문제가 없으면 숫자를 만들지 않고 "기록 없음" 이라고 밝힌다.
+//
+// unit_score_history 는 출제 단원(18개) 이름으로 쌓이므로, 화면에 보이는
+// 큰 분류로 묶어서 합산한다.
+const TYPE_GROUPS = [
+  { name: '수와 연산',     color: '#3b82f6', units: ['수와 연산', '지수와 로그'] },
+  { name: '방정식·부등식', color: '#06b6d4', units: ['방정식과 부등식'] },
+  { name: '함수',          color: '#8b5cf6', units: ['함수', '삼각함수', '함수의 극한과 연속'] },
+  { name: '수열',          color: '#ec4899', units: ['수열', '수열의 극한'] },
+  { name: '확률·통계',     color: '#f59e0b', units: ['경우의 수', '확률', '통계'] },
+  { name: '미적분',        color: '#22c55e', units: ['미분', '적분', '미분법', '적분법'] },
+  { name: '기하',          color: '#64748b', units: ['이차곡선', '평면벡터', '공간도형과 공간좌표'] },
+];
+
 function drawTypeChart() {
   const container = document.getElementById('typeChart');
   if (!container) return;
-  const types = [
-    { name: '수와 연산', color: '#3b82f6' },
-    { name: '방정식·부등식', color: '#06b6d4' },
-    { name: '함수', color: '#8b5cf6' },
-    { name: '수열', color: '#ec4899' },
-    { name: '확률·통계', color: '#f59e0b' },
-    { name: '미적분', color: '#22c55e' },
-  ];
-  const weakSet = new Set(state.weakTypes);
-  container.innerHTML = types.map(t => {
-    const isWeak = weakSet.has(t.name) || [...weakSet].some(w => w.includes(t.name) || t.name.includes(w));
-    const pct = isWeak ? Math.floor(Math.random() * 30 + 20) : Math.floor(Math.random() * 40 + 55);
-    return `<div class="type-bar-item">
-      <div class="type-bar-label"><span>${t.name}</span><span>${isWeak ? '⚠️ 약점' : pct + '%'}</span></div>
-      <div class="type-bar-bg"><div class="type-bar-fill" style="width:${pct}%;background:${t.color}"></div></div>
+
+  const hist = state.unitScoreHistory || {};
+  const weakList = (state.weakTypes || []).map(cleanWeakType);
+
+  const rows = TYPE_GROUPS.map((g) => {
+    let correct = 0, total = 0;
+    g.units.forEach((u) => {
+      (hist[u] || []).forEach((e) => {
+        correct += (e.correct || 0);
+        total   += (e.total   || 0);
+      });
+    });
+    // AI 성적표 분석이 약점으로 지목했는지 (큰 분류 이름 또는 소속 단원 이름으로 대조)
+    const isWeak = weakList.some((w) =>
+      w.includes(g.name) || g.name.includes(w) ||
+      g.units.some((u) => w.includes(u) || u.includes(w)));
+    return { ...g, correct, total, isWeak, pct: total ? Math.round(correct / total * 100) : null };
+  });
+
+  const anyData = rows.some((r) => r.total > 0);
+
+  container.innerHTML = rows.map((r) => {
+    const hasData = r.pct !== null;
+    const width = hasData ? r.pct : 0;
+    const color = hasData ? r.color : '#e2e8f0';
+    // 분모를 같이 보여준다. "67%" 만 쓰면 3문제 중 2개인지 30문제 중 20개인지 알 수 없다.
+    const right = hasData
+      ? `${r.pct}% · ${r.total}문제${r.isWeak ? ' ⚠️' : ''}`
+      : (r.isWeak ? '⚠️ 약점' : '기록 없음');
+    const dim = hasData ? '' : 'opacity:0.55;';
+    return `<div class="type-bar-item" style="${dim}">
+      <div class="type-bar-label"><span>${r.name}</span><span>${right}</span></div>
+      <div class="type-bar-bg"><div class="type-bar-fill" style="width:${width}%;background:${color}"></div></div>
     </div>`;
-  }).join('');
+  }).join('') + (anyData
+    ? ''
+    : '<p class="empty-hint" style="margin-top:12px;">문제를 풀면 단원별 정답률이 여기에 쌓여요</p>');
 }
 
 function cleanWeakType(t) {
@@ -5009,3 +5056,215 @@ window.doSignup = window.doSignup || function(){};
 window.doLogout = window.doLogout || function(){};
 window.doResetPw = window.doResetPw || function(){};
 window.navigateTo = navigateTo;
+
+// ============================================================
+//  손글씨 답 입력
+//
+//  왜 만들었나
+//    폰에서 1/3, √2 같은 답을 치는 게 불편하다.
+//
+//  어떻게 도나
+//    캔버스에 쓴 글씨를 AI가 읽어서 "원래 있던 입력칸에 글자로 채워준다".
+//    채점은 예전 그대로 입력칸의 글자를 코드가 비교한다.
+//    → AI가 채점에 끼어들지 않는다. 예전에 고친 구조가 그대로 유지된다.
+//    → 읽은 결과가 입력칸에 보이므로, 잘못 읽었으면 학생이 직접 고칠 수 있다.
+//
+//  왜 주관식에만 붙이나
+//    객관식은 ①~⑤ 버튼이 이미 편하고 AI를 거칠 이유가 없다.
+//    그리고 입력 방식이 답의 형태(정수냐 분수냐)를 알려주면 안 되므로,
+//    주관식에는 답이 무엇이든 항상 같은 UI를 붙인다.
+// ============================================================
+
+const HW_MAX_TOKENS = 64;   // 답 몇 글자만 받으면 된다
+const HW_THINK      = 0;    // 판독에 추론은 필요 없다. 사고 토큰도 출력 요금이다.
+const HW_HEIGHT     = 170;  // 캔버스 높이(px)
+
+function hwPrompt() {
+  return [
+    '이 이미지는 학생이 손으로 쓴 수학 문제의 답이다.',
+    '쓰여 있는 값을 그대로 읽어서 한 줄로만 출력하라.',
+    '',
+    '규칙:',
+    '- 설명·풀이·단위·따옴표 없이 값만 출력한다.',
+    '- 분수는 1/3 형태로 쓴다.',
+    '- 루트는 √2 형태로 쓴다.',
+    '- 거듭제곱은 2^3 형태로 쓴다.',
+    '- 알아볼 수 없으면 ? 한 글자만 출력한다.',
+  ].join('\n');
+}
+
+// 입력칸 하나에 손글씨 UI를 붙인다. 이미 붙어 있으면 아무것도 하지 않는다.
+// mountAfter: UI를 어느 요소 뒤에 넣을지. 입력칸이 flex 줄 안에 있으면
+//             그 줄 전체를 넘겨야 버튼 옆으로 끼어들지 않는다.
+function attachHandwriting(input, mountAfter) {
+  if (!input || input.dataset.hwOn === '1') return;
+  input.dataset.hwOn = '1';
+
+  const box = document.createElement('div');
+  box.className = 'hw-box';
+  box.innerHTML = `
+    <div class="hw-tabs">
+      <button type="button" class="hw-tab is-on" data-m="key">⌨️ 직접 입력</button>
+      <button type="button" class="hw-tab" data-m="pen">✏️ 손글씨</button>
+    </div>
+    <div class="hw-pad hidden">
+      <canvas class="hw-canvas"></canvas>
+      <div class="hw-actions">
+        <button type="button" class="hw-btn hw-undo">되돌리기</button>
+        <button type="button" class="hw-btn hw-clear">지우기</button>
+        <button type="button" class="hw-btn hw-read">읽기</button>
+      </div>
+      <div class="hw-msg"></div>
+    </div>`;
+  (mountAfter || input).insertAdjacentElement('afterend', box);
+  input._hwBox = box;   // 숨길 때 찾기 위해 참조를 들고 있는다 (형제 탐색은 깨지기 쉽다)
+
+  const pad    = box.querySelector('.hw-pad');
+  const canvas = box.querySelector('.hw-canvas');
+  const msg    = box.querySelector('.hw-msg');
+  const ctx    = canvas.getContext('2d');
+
+  // 획을 배열로 들고 있어야 되돌리기가 된다
+  let strokes = [];
+  let cur = null;
+
+  function fitCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth || box.clientWidth || 300;
+    canvas.width  = Math.round(w * dpr);
+    canvas.height = Math.round(HW_HEIGHT * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    redraw();
+  }
+
+  function redraw() {
+    const w = canvas.width / (window.devicePixelRatio || 1);
+    const h = canvas.height / (window.devicePixelRatio || 1);
+    ctx.clearRect(0, 0, w, h);
+    ctx.strokeStyle = '#1b2234';
+    ctx.lineWidth = 2.6;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    strokes.forEach((s) => {
+      if (s.length < 2) {
+        if (s.length === 1) {   // 점 하나만 찍은 경우도 보이게
+          ctx.beginPath(); ctx.arc(s[0].x, s[0].y, 1.4, 0, Math.PI * 2); ctx.fill();
+        }
+        return;
+      }
+      ctx.beginPath();
+      ctx.moveTo(s[0].x, s[0].y);
+      for (let i = 1; i < s.length; i++) ctx.lineTo(s[i].x, s[i].y);
+      ctx.stroke();
+    });
+  }
+
+  const pos = (e) => {
+    const r = canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+
+  // Pointer Events 하나로 마우스·손가락·애플펜슬을 모두 받는다
+  canvas.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    canvas.setPointerCapture(e.pointerId);
+    cur = [pos(e)];
+    strokes.push(cur);
+    msg.textContent = '';
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!cur) return;
+    e.preventDefault();
+    cur.push(pos(e));
+    redraw();
+  });
+  const endStroke = () => { cur = null; };
+  canvas.addEventListener('pointerup', endStroke);
+  canvas.addEventListener('pointercancel', endStroke);
+  canvas.addEventListener('pointerleave', endStroke);
+
+  box.querySelector('.hw-undo').onclick  = () => { strokes.pop(); redraw(); };
+  box.querySelector('.hw-clear').onclick = () => { strokes = []; redraw(); msg.textContent = ''; };
+
+  // 탭 전환
+  box.querySelectorAll('.hw-tab').forEach((t) => {
+    t.onclick = () => {
+      box.querySelectorAll('.hw-tab').forEach((x) => x.classList.remove('is-on'));
+      t.classList.add('is-on');
+      const pen = t.dataset.m === 'pen';
+      pad.classList.toggle('hidden', !pen);
+      if (pen) requestAnimationFrame(fitCanvas);
+    };
+  });
+
+  // 읽기
+  box.querySelector('.hw-read').onclick = async (e) => {
+    if (strokes.length === 0) { msg.textContent = '먼저 답을 써주세요.'; return; }
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    const old = btn.textContent;
+    btn.textContent = '읽는 중...';
+    msg.textContent = '';
+
+    try {
+      // JPEG 는 투명을 검정으로 바꾸므로 흰 배경을 먼저 깔아야 한다
+      const out = document.createElement('canvas');
+      out.width = canvas.width; out.height = canvas.height;
+      const octx = out.getContext('2d');
+      octx.fillStyle = '#ffffff';
+      octx.fillRect(0, 0, out.width, out.height);
+      octx.drawImage(canvas, 0, 0);
+      const b64 = out.toDataURL('image/jpeg', 0.9).split(',')[1];
+
+      const res = await aiFetch({
+        contents: [{ parts: [
+          { text: hwPrompt() },
+          { inline_data: { mime_type: 'image/jpeg', data: b64 } },
+        ] }],
+        generationConfig: {
+          temperature: 0,
+          maxOutputTokens: HW_MAX_TOKENS,
+          thinkingConfig: { thinkingBudget: HW_THINK },
+        },
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || `판독 실패 (${res.status})`);
+
+      const parts = data.candidates?.[0]?.content?.parts || [];
+      const read = parts.filter((p) => p.text && !p.thought).map((p) => p.text).join('')
+        .replace(/[`"'\n\r]/g, '').trim();
+
+      if (!read || read === '?') {
+        msg.textContent = '글씨를 알아보지 못했어요. 더 크게 써보거나 직접 입력해 주세요.';
+        return;
+      }
+      input.value = read;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      msg.innerHTML = `<span class="hw-ok">입력칸에 "${read}" 로 넣었어요. 다르면 직접 고치세요.</span>`;
+    } catch (err) {
+      msg.textContent = '판독 실패: ' + err.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = old;
+    }
+  };
+
+  window.addEventListener('resize', () => { if (!pad.classList.contains('hidden')) fitCanvas(); });
+}
+
+// 화면에 있는 주관식 입력칸 전부에 붙인다. 렌더 후에 호출한다.
+function attachHandwritingAll() {
+  ['#basicAns', '#intensiveAns'].forEach((sel) => {
+    const el = document.querySelector(sel);
+    if (el) attachHandwriting(el);
+  });
+  document.querySelectorAll('.multi-ans-input').forEach(attachHandwriting);
+}
+
+// 객관식일 때는 입력칸과 함께 손글씨 UI도 숨긴다 (입력 방식이 답 형태를 알리지 않도록)
+function setAnswerInputVisible(input, visible) {
+  if (!input) return;
+  input.style.display = visible ? '' : 'none';
+  if (input._hwBox) input._hwBox.classList.toggle('hidden', !visible);
+}

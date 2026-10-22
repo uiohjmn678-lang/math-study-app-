@@ -578,6 +578,95 @@ canvas { width: 100% !important; }
   .multi-problem-card { padding: 14px; border-radius: 12px; }
 }
 
+/* ===== 긴 수식이 화면 밖으로 잘리는 문제 =====
+   원인: body 에 overflow-x:hidden 이 걸려 있어 페이지가 가로로 안 밀리는데,
+        아래의 overflow:visible 때문에 긴 수식은 박스 밖으로 삐져나간다.
+        그래서 폰에서 화면 오른쪽 끝에서 그냥 잘려 보인다.
+   해결: 페이지가 아니라 "수식 하나"만 가로로 스크롤되게 한다.
+        MathJax 는 수식마다 mjx-container 로 감싸므로 거기에만 건다. */
+   주의: mjx-container 는 브라우저가 모르는 태그라 기본이 inline 이고,
+        inline 요소에는 overflow-x 가 적용되지 않는다. display 를 직접 지정해야 한다. */
+mjx-container {
+  max-width: 100%;
+}
+mjx-container[display="true"] {
+  display: block;                      /* ← 이게 없으면 아래 overflow 가 무시된다 */
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 6px;                 /* 스크롤바가 수식 아랫부분을 가리지 않게 */
+  -webkit-overflow-scrolling: touch;   /* iOS 에서 부드럽게 */
+}
+/* 긴 토막이 단어 단위로 안 끊겨 넘치는 경우까지 막는다 */
+.feedback-section-body, .result-box, .multi-result-box, .multi-problem-body {
+  overflow-wrap: anywhere;
+}
+
 /* ===== 풀이/문제 박스: 높이 제한 없이 전체 펼침 (스크롤 잘림 방지) ===== */
 .multi-result-box, .result-box, .feedback-section-body, .feedback-wrap { max-height: none !important; overflow: visible !important; }
 .problem-list-wrap, .multi-problem-item, .multi-problem-card, .multi-problem-body, .multi-answer-area { max-height: none; overflow: visible; }
+/* ===== 손글씨 답 입력 =====
+   주관식 입력칸 아래에 붙는다. 객관식에는 아예 만들어지지 않는다. */
+.hw-box { margin-top: 8px; }
+.hw-tabs {
+  display: inline-flex;
+  gap: 4px;
+  background: var(--bg3, #f2f5fa);
+  border: 1px solid var(--border, #e3e6ea);
+  border-radius: 10px;
+  padding: 3px;
+}
+.hw-tab {
+  border: none;
+  background: transparent;
+  color: var(--text2, #5a6477);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 7px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.hw-tab.is-on {
+  background: #fff;
+  color: var(--accent, #4A90E2);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.hw-pad { margin-top: 8px; }
+.hw-canvas {
+  display: block;
+  width: 100%;
+  height: 170px;
+  background: #fff;
+  border: 1.5px dashed var(--border, #cbd5e1);
+  border-radius: 12px;
+  /* 그리는 동안 화면이 같이 스크롤되지 않게 한다. 이게 없으면 폰에서 글씨를 못 쓴다. */
+  touch-action: none;
+  cursor: crosshair;
+}
+.hw-actions { display: flex; gap: 8px; margin-top: 8px; }
+.hw-btn {
+  flex: 1 1 0;
+  border: 1px solid var(--border, #e3e6ea);
+  background: #fff;
+  color: var(--text2, #5a6477);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 10px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.hw-btn:disabled { opacity: 0.55; cursor: default; }
+.hw-read {
+  background: var(--accent, #4A90E2);
+  border-color: var(--accent, #4A90E2);
+  color: #fff;
+  flex: 1.4 1 0;
+}
+.hw-msg { font-size: 0.82rem; color: var(--red, #d14343); margin-top: 8px; min-height: 18px; line-height: 1.5; }
+.hw-msg .hw-ok { color: var(--green, #34C759); }
+
+@media (max-width: 900px) {
+  .hw-canvas { height: 150px; }
+}
