@@ -2,6 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
+  <link rel="icon" href="data:,">
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>수학완성 - AI 수능 수학 학습 도우미</title>
   <link rel="stylesheet" href="style.css" />
@@ -209,7 +210,7 @@
     };
   </script>
   <script src="https://d3js.org/d3.v7.min.js"></script>
-  <script src="https://www.desmos.com/api/v1.9/calculator.js?apiKey=dcb31709b452b1cf9dc26972add0fda6"></script>
+  <script src="https://www.desmos.com/api/v1.11/calculator.js?apiKey=7b3c084d27924125a77cf79ea6034db4"></script>
   <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
 <body>
@@ -374,13 +375,14 @@
       <section class="page" id="page-analyze">
         <div class="page-header">
           <h2>📸 성적 분석 · 시험지 풀기</h2>
-          <p>성적표 사진(여러 장) 또는 시험지 PDF를 올리면 AI가 분석·문제 추출까지 해드려요</p>
+          <p>성적표 사진이나 시험지 PDF를 올리면 AI가 분석해드려요. 둘 다 없으면 레벨 테스트로 바로 재볼 수 있어요</p>
         </div>
 
         <!-- 업로드 모드 탭 -->
         <div class="upload-mode-tabs" id="uploadModeTabs">
           <button class="umode-btn active" data-mode="image" onclick="switchUploadMode('image')">📸 이미지 (성적표)</button>
           <button class="umode-btn" data-mode="pdf" onclick="switchUploadMode('pdf')">📄 PDF (시험지)</button>
+          <button class="umode-btn" data-mode="level" onclick="switchUploadMode('level')">📝 레벨 테스트 (시험지 없이)</button>
         </div>
 
         <div class="analyze-layout">
@@ -473,19 +475,28 @@
               🤖 AI 분석 시작
             </button>
 
-            <div id="analyzeResult" class="result-box hidden">
-              <h3 id="analyzeResultTitle">📊 분석 결과</h3>
-              <div id="resultContent"></div>
-            </div>
+          </div>
 
-            <!-- PDF 문제 추출 결과 - 문제 목록 & 풀기 -->
-            <div id="pdfProblemsArea" class="hidden">
-              <div class="pdf-problems-header">
-                <h3>📋 추출된 문제</h3>
-                <span id="pdfProblemCount" class="problem-count-badge"></span>
-              </div>
-              <div id="pdfProblemList" class="pdf-problem-list"></div>
+          <!-- 레벨 테스트: 성적표·시험지가 없을 때 쓰는 세 번째 진단 경로 -->
+          <div id="levelModeArea" class="analyze-wide hidden">
+            <div id="ltIntro"></div>
+            <div id="ltProgress" class="hidden" style="margin-bottom:14px;"></div>
+            <div id="ltProblemList" class="problem-list-wrap hidden"></div>
+            <div id="ltResult" class="result-box hidden"></div>
+          </div>
+
+          <!-- 분석 결과 · 추출 문제: 좌우 칸을 가로질러 전체 너비로 표시 -->
+          <div id="analyzeResult" class="result-box analyze-wide hidden">
+            <h3 id="analyzeResultTitle">📊 분석 결과</h3>
+            <div id="resultContent"></div>
+          </div>
+
+          <div id="pdfProblemsArea" class="analyze-wide hidden">
+            <div class="pdf-problems-header">
+              <h3>📋 추출된 문제</h3>
+              <span id="pdfProblemCount" class="problem-count-badge"></span>
             </div>
+            <div id="pdfProblemList" class="pdf-problem-list"></div>
           </div>
         </div>
       </section>
@@ -544,8 +555,8 @@
         <div class="tab-content" id="tab-basic">
           <div class="basic-card">
             <h3>📚 기본 문제 풀기</h3>
-            <div class="type-select-row">
-              <select class="select-input" id="mathType">
+            <div class="type-select-col">
+              <select class="select-input hidden" id="mathType">
                 <optgroup label="📘 공통수학">
                   <option value="수와 연산">수와 연산</option>
                   <option value="방정식과 부등식">방정식과 부등식</option>
@@ -577,7 +588,8 @@
                   <option value="공간도형과 공간좌표">공간도형과 공간좌표</option>
                 </optgroup>
               </select>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <div id="mathTypePicker" class="type-picker"></div>
+              <div class="type-btn-row">
                 <button class="btn-primary" onclick="getBasicProblems('ai')">🤖 AI 문제</button>
                 <button class="btn-primary" onclick="getBasicProblems('db')" style="background:linear-gradient(135deg,#FF6B35,#FF9F1C);">📋 수능 기출</button>
               </div>

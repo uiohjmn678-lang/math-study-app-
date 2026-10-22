@@ -141,6 +141,7 @@ a:hover { text-decoration: underline; }
 .step p { color: var(--text2); font-size: 0.8rem; line-height: 1.5; }
 .step-arrow { font-size: 1.5rem; color: var(--text3); padding: 0 8px; flex-shrink: 0; }
 
+
 /* ===== PAGE HEADER ===== */
 .page-header { padding: 48px 64px 32px; }
 .page-header h2 { font-size: 2rem; font-weight: 800; margin-bottom: 8px; color: var(--text); }
@@ -183,10 +184,77 @@ a:hover { text-decoration: underline; }
 .goal-empty { text-align: center; padding: 40px; }
 .goal-empty p { color: var(--text2); margin-bottom: 20px; line-height: 1.6; }
 .solve-desc { color: var(--text2); margin-bottom: 20px; }
+
+/* ===== 풀이 연습 업로드 드롭존 ===== */
+.upload-area {
+  background: linear-gradient(180deg, var(--bg2), var(--card));
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 44px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .2s, background .2s, transform .2s, box-shadow .2s;
+}
+.upload-area:hover {
+  border-color: var(--accent);
+  background: linear-gradient(180deg, rgba(74,144,226,0.06), var(--card));
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card);
+}
+.upload-area.drag-over {
+  border-color: var(--accent);
+  border-style: solid;
+  background: rgba(74,144,226,0.10);
+  transform: scale(1.01);
+  box-shadow: 0 0 0 4px var(--accent-glow);
+}
+.upload-area .upload-icon {
+  width: 76px; height: 76px;
+  margin: 0 auto 18px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2.1rem;
+  background: linear-gradient(135deg, rgba(74,144,226,0.16), rgba(107,126,201,0.16));
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  transition: transform .2s;
+}
+.upload-area:hover .upload-icon { transform: scale(1.06) rotate(-3deg); }
+.upload-text { font-weight: 800; font-size: 1.05rem; color: var(--text); margin-bottom: 6px; letter-spacing: -0.3px; }
+.upload-subtext { font-size: 0.82rem; color: var(--text3); line-height: 1.5; }
+.upload-pill {
+  display: inline-block; margin-top: 18px;
+  padding: 10px 22px; border-radius: 99px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: #fff; font-weight: 700; font-size: 0.88rem;
+  box-shadow: 0 4px 14px rgba(74,144,226,0.28);
+  transition: transform .2s, box-shadow .2s;
+}
+.upload-area:hover .upload-pill { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(74,144,226,0.35); }
 .solve-textarea { width: 100%; background: var(--bg3); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 14px; color: var(--text); font-family: 'Pretendard', sans-serif; font-size: 0.9rem; resize: vertical; min-height: 140px; margin-bottom: 12px; transition: all 0.2s; }
 .solve-textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
 .problem-box { background: rgba(74,144,226,0.06); border-left: 4px solid var(--accent); border-radius: var(--radius-sm); padding: 20px; margin: 20px 0; line-height: 1.8; color: var(--text); }
 .type-select-row { display: flex; gap: 12px; margin-bottom: 20px; }
+.type-select-col { display: flex; flex-direction: column; gap: 18px; margin-bottom: 20px; }
+.type-btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ===== 단원 선택 칩 피커 ===== */
+.type-picker { display: flex; flex-direction: column; gap: 16px; }
+.tp-group { }
+.tp-group-label { font-weight: 800; font-size: 0.8rem; color: var(--text2); margin-bottom: 10px; letter-spacing: -0.2px; }
+.tp-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.tp-chip {
+  padding: 9px 16px; border-radius: 99px;
+  border: 1.5px solid var(--border); background: var(--card);
+  color: var(--text2); font-weight: 600; font-size: 0.88rem;
+  font-family: 'Pretendard', sans-serif; cursor: pointer;
+  transition: all .15s;
+}
+.tp-chip:hover { border-color: var(--accent); color: var(--accent); background: rgba(74,144,226,0.05); transform: translateY(-1px); }
+.tp-chip.selected {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border-color: var(--accent); color: #fff;
+  box-shadow: 0 4px 12px var(--accent-glow);
+}
 .hint-btn { margin-left: 8px; }
 .weak-types { margin: 16px 0; }
 .empty-hint { color: var(--text3); font-style: italic; font-size: 0.85rem; }
@@ -318,7 +386,13 @@ canvas { width: 100% !important; }
 .feedback-section-body { color: var(--text); font-size: 0.88rem; line-height: 1.8; padding-left: 4px; }
 
 /* ===== 분석 결과 카드 ===== */
-.analysis-cards { display: flex; flex-direction: column; gap: 12px; }
+/* ===== 분석 결과: 좌우 칸을 가로질러 전체 너비 ===== */
+.analyze-wide { grid-column: 1 / -1; }
+
+/* 카드가 한 줄씩 세로로 늘어지지 않도록 2단으로 묶는다.
+   카드마다 높이가 달라서 grid 대신 multi-column 을 써야 빈칸 없이 채워진다. */
+.analysis-cards { columns: 2; column-gap: 14px; }
+.analysis-card { break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid; margin-bottom: 14px; display: inline-block; width: 100%; }
 .analysis-card { background: var(--bg3); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 16px 20px; }
 .analysis-card-title { font-weight: 700; font-size: 0.88rem; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
 .analysis-card-body { color: var(--text); font-size: 0.88rem; line-height: 1.9; }
@@ -446,12 +520,62 @@ canvas { width: 100% !important; }
   .step-arrow { transform: rotate(90deg); }
   .page-header { padding: 32px 24px 20px; }
   .analyze-layout { grid-template-columns: 1fr; padding: 0 24px 40px; }
+  .analysis-cards { columns: 1; }
   .training-tabs { padding: 0 24px 16px; }
   .tab-content { padding: 0 24px 40px; }
   .stats-grid { grid-template-columns: 1fr; padding: 0 24px 40px; }
   .stats-card.span2 { grid-column: span 1; }
-  .header { padding: 0 16px; }
-  .header-nav { display: none; }
+  /* backdrop-filter 가 걸린 조상 안에서는 position:fixed 가 화면이 아니라
+     그 조상을 기준으로 잡힌다. 아래 탭바를 화면 바닥에 붙이려면 꺼야 한다. */
+  .header { padding: 0 16px; backdrop-filter: none; }
+
+  /* [배포] 폰에서 탭을 숨기면 페이지 이동이 아예 막힌다.
+     숨기지 말고 화면 아래 탭바로 내린다. */
+  .header-nav {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 200;
+    display: flex; gap: 2px; flex: none;
+    background: rgba(255, 255, 255, 0.97);
+    border-top: 1px solid var(--border);
+    backdrop-filter: blur(12px);
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+  }
+  .header-nav .nav-btn {
+    flex: 1 1 0; min-width: 0;
+    font-size: 0.72rem; font-weight: 700;
+    padding: 9px 2px; border-radius: 10px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .header-nav .nav-btn.active { background: rgba(74, 144, 226, 0.14); }
+
+  /* 탭바가 본문 끝을 가리지 않도록 아래 여백을 준다 */
+  body { padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* ===== [v9] 문제 카드 =====
+   한 화면에 여러 문제를 놓으면(레벨 테스트) 경계가 없어서 어디서 끊기는지 안 보인다.
+   카드마다 테두리를 줘서 문제 단위를 눈으로 구분되게 한다. */
+.multi-problem-card {
+  background: var(--card, #fff);
+  border: 1.5px solid var(--border, #e3e6ea);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+.multi-problem-card + .multi-problem-card { margin-top: 0; }
+.multi-problem-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border, #e3e6ea);
+}
+.multi-problem-num { font-weight: 700; font-size: 0.98rem; }
+.multi-problem-body { line-height: 1.65; }
+
+@media (max-width: 900px) {
+  .multi-problem-card { padding: 14px; border-radius: 12px; }
 }
 
 /* ===== 풀이/문제 박스: 높이 제한 없이 전체 펼침 (스크롤 잘림 방지) ===== */

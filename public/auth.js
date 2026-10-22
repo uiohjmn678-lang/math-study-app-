@@ -17,13 +17,82 @@ const auth = getAuth(app);
 // ===== 현재 페이지 확인 =====
 const isAuthPage = window.location.pathname.includes('auth.html');
 
-// ===== 로그인 상태 감지 =====
-onAuthStateChanged(auth, (user) => {
-  if (user && isAuthPage) {
-    window.location.href = 'index.html';
-  } else if (!user && !isAuthPage) {
-    window.location.href = 'auth.html';
+// ===== 승인 확인 =====
+// 가입은 누구나 할 수 있지만, 관리자가 승인해야 앱을 쓸 수 있다.
+// 승인 표시는 로그인 토큰 안에 박혀 있다(커스텀 클레임).
+// approve.js 로만 붙일 수 있어서 사용자가 위조할 수 없다.
+async function isApproved(user, forceRefresh) {
+  try {
+    // forceRefresh=true 로 받아야 방금 승인된 것이 바로 반영된다
+    const r = await user.getIdTokenResult(!!forceRefresh);
+    return r.claims && r.claims.approved === true;
+  } catch (e) {
+    console.warn('승인 상태를 확인하지 못했습니다:', e.message);
+    return false;
   }
+}
+
+// 승인 대기 화면 (auth.html 을 고치지 않아도 되도록 코드로 띄운다)
+function showPending(user) {
+  if (document.getElementById('pendingOverlay')) return;
+  const name = user.displayName || '';
+  const box = document.createElement('div');
+  box.id = 'pendingOverlay';
+  box.style.cssText =
+    'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;' +
+    'background:rgba(245,248,255,0.97);backdrop-filter:blur(6px);padding:24px;' +
+    "font-family:'Pretendard',system-ui,sans-serif;";
+  box.innerHTML = `
+    <div style="max-width:420px;width:100%;background:#fff;border:1px solid #e3e6ea;border-radius:18px;
+                padding:32px 28px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,0.06);">
+      <div style="font-size:2.6rem;line-height:1;margin-bottom:14px;">🕒</div>
+      <div style="font-size:1.25rem;font-weight:800;color:#1b2234;margin-bottom:10px;">
+        승인 대기 중이에요
+      </div>
+      <div style="font-size:0.95rem;line-height:1.65;color:#5a6477;margin-bottom:22px;">
+        ${name ? name + '님, ' : ''}가입 신청이 접수됐어요.<br>
+        관리자가 승인하면 바로 이용할 수 있어요.
+      </div>
+      <div style="font-size:0.82rem;color:#8a92a6;background:#f6f8fc;border-radius:10px;
+                  padding:10px 12px;margin-bottom:20px;word-break:break-all;">
+        ${user.email || ''}
+      </div>
+      <button id="pendingRecheck" style="width:100%;padding:12px;border:none;border-radius:12px;
+              background:#4A90E2;color:#fff;font-size:0.95rem;font-weight:700;cursor:pointer;
+              font-family:inherit;margin-bottom:8px;">승인됐는지 다시 확인</button>
+      <button id="pendingLogout" style="width:100%;padding:12px;border:1px solid #e3e6ea;
+              border-radius:12px;background:#fff;color:#5a6477;font-size:0.9rem;font-weight:600;
+              cursor:pointer;font-family:inherit;">로그아웃</button>
+      <div id="pendingMsg" style="font-size:0.82rem;color:#d14343;margin-top:12px;min-height:18px;"></div>
+    </div>`;
+  document.body.appendChild(box);
+
+  document.getElementById('pendingRecheck').onclick = async (e) => {
+    const btn = e.currentTarget;
+    const msg = document.getElementById('pendingMsg');
+    btn.textContent = '확인 중...'; btn.disabled = true; msg.textContent = '';
+    const ok = await isApproved(user, true);
+    if (ok) { window.location.href = 'index.html'; return; }
+    msg.textContent = '아직 승인되지 않았어요.';
+    btn.textContent = '승인됐는지 다시 확인'; btn.disabled = false;
+  };
+  document.getElementById('pendingLogout').onclick = () => signOut(auth).then(() => location.reload());
+}
+
+// ===== 로그인 상태 감지 =====
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
+    if (!isAuthPage) window.location.href = 'auth.html';
+    return;
+  }
+  const ok = await isApproved(user, true);
+  if (ok) {
+    if (isAuthPage) window.location.href = 'index.html';
+    return;
+  }
+  // 승인 전: 앱으로 못 들어가고 대기 화면만 본다
+  if (!isAuthPage) { window.location.href = 'auth.html'; return; }
+  showPending(user);
 });
 
 // ===== 로그아웃 (index.html에서 사용) =====
@@ -105,7 +174,8 @@ if (isAuthPage) {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pw);
       await updateProfile(userCredential.user, { displayName: name });
-      showSuccess('signup-success', `🎉 ${name}님, 회원가입 완료!`);
+      // 가입은 됐지만 아직 승인 전이다. onAuthStateChanged 가 대기 화면을 띄운다.
+      showSuccess('signup-success', `${name}님, 가입 신청이 접수됐어요. 승인을 기다려 주세요.`);
     } catch (e) {
       showError('signup-error', getErrorMsg(e.code));
       btn.textContent = '회원가입'; btn.disabled = false;

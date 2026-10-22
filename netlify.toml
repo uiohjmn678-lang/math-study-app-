@@ -1,9 +1,55 @@
-[build]
-  publish = "."
-  functions = "netlify/functions"
+# ============================================================
+#  Netlify 배포 설정
+#
+#  ★ publish = "public" 이 가장 중요하다.
+#    저장소 전체를 공개하면 generate_bank.js 같은 파일까지
+#    주소만 치면 내려받을 수 있게 된다. 그 안에는 Gemini 키가 들어 있다.
+#    그래서 웹에 올릴 파일만 public/ 에 모으고, 그 폴더만 공개한다.
+#
+#  폴더 구조
+#    프로젝트/
+#      public/                ← 이 폴더만 인터넷에 올라간다
+#        index.html
+#        script.js
+#        style.css
+#        auth.js
+#      netlify/functions/
+#        gemini.js            ← AI 키를 숨기는 프록시
+#      generate_bank.js       ← 올라가지 않는다 (키 들어 있음)
+#      upload_bank.js         ← 올라가지 않는다
+#      serviceAccountKey.json ← 올라가지 않는다 (.gitignore)
+#      netlify.toml
+#      .gitignore
+# ============================================================
 
-[[redirects]]
-  from = "/api/gemini"
-  to = "/.netlify/functions/gemini"
-  status = 200
-  force = true
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+  command = ""
+
+[build.environment]
+  NODE_VERSION = "20"
+   FIREBASE_WEB_API_KEY = "AIzaSyCf-4hUar_Ub7ukMkaHxFlvHyvnjulK5_g"
+
+[functions]
+  node_bundler = "esbuild"
+
+# 보안 헤더
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "SAMEORIGIN"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
+
+# 소스 파일은 캐시하지 않는다 (고치면 바로 반영되도록)
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
