@@ -29,7 +29,19 @@
 
 [build.environment]
   NODE_VERSION = "20"
-   FIREBASE_WEB_API_KEY = "AIzaSyCf-4hUar_Ub7ukMkaHxFlvHyvnjulK5_g"
+
+  # ★ 환경변수를 여기 적지 말 것 — 함수에 전달되지 않는다.
+  #   Netlify 공식 문서: "netlify.toml 에 선언한 환경변수는 서버리스 함수에서 사용할 수 없습니다."
+  #   GEMINI_API_KEY 와 FIREBASE_WEB_API_KEY 는 반드시
+  #   Netlify 대시보드 → Environment variables 에 등록해야 한다.
+  #   (netlify dev 는 이 파일을 읽어주기 때문에 로컬에서만 되고 배포본에서 안 되는
+  #    현상이 생긴다. 실제로 그 함정에 한 번 빠졌다.)
+
+  # FIREBASE_WEB_API_KEY 는 원래 공개되는 값이라 public/auth.js 안에도 들어 있다.
+  # 그대로 두면 Netlify 의 비밀값 검사가 "키가 빌드 결과물에 노출됐다"며 배포를 실패시킨다.
+  # 그래서 이 키만 검사에서 제외한다. GEMINI_API_KEY 는 계속 검사되므로,
+  # 실수로 코드에 넣으면 배포가 막혀 준다.
+  SECRETS_SCAN_OMIT_KEYS = "FIREBASE_WEB_API_KEY"
 
 [functions]
   node_bundler = "esbuild"

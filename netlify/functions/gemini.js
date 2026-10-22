@@ -55,12 +55,24 @@ exports.handler = async (event) => {
   }
 
   // ---- 승인된 로그인 사용자만 통과 ----
-  // FIREBASE_WEB_API_KEY 를 등록해 두면 검사한다. (없으면 검사하지 않고 통과)
+  // ★ 검사에 필요한 것이 없으면 "통과"가 아니라 "차단"이다.
+  //   예전에는 FIREBASE_WEB_API_KEY 가 없으면 검사를 건너뛰고 통과시켰는데,
+  //   그러면 환경변수를 깜빡한 순간 이 주소가 아무나 쓸 수 있는 입구가 된다.
+  //   (netlify.toml 에 적은 환경변수는 함수에 전달되지 않기 때문에 실제로 그런 일이 있었다)
+  //   비용이 걸린 키를 다루는 입구는 열린 채로 두느니 멈추는 쪽이 맞다.
+  const webKey = process.env.FIREBASE_WEB_API_KEY;
+  if (!webKey) {
+    console.error('[gemini] FIREBASE_WEB_API_KEY 가 없어 요청을 차단했습니다. ' +
+      'Netlify 대시보드의 Environment variables 에 등록하세요 (netlify.toml 은 함수에 전달되지 않습니다).');
+    return json(503, {
+      error: { message: '서버 설정이 끝나지 않았습니다. 관리자에게 문의하세요.' },
+    });
+  }
+
   // 확인 방법: 브라우저가 보낸 로그인 토큰을 구글에 물어보고,
   //            토큰 안에 approved 표시가 박혀 있는지 본다.
   //            승인 표시는 approve.js 로만 붙일 수 있어 사용자가 위조할 수 없다.
-  const webKey = process.env.FIREBASE_WEB_API_KEY;
-  if (webKey) {
+  {
     const authz = event.headers.authorization || event.headers.Authorization || '';
     const idToken = authz.startsWith('Bearer ') ? authz.slice(7) : '';
     if (!idToken) {
@@ -88,8 +100,6 @@ exports.handler = async (event) => {
       console.error('[gemini] 로그인 확인 실패:', e.message);
       return json(503, { error: { message: '로그인 확인에 실패했습니다. 잠시 후 다시 시도해 주세요.' } });
     }
-  } else {
-    console.warn('[gemini] FIREBASE_WEB_API_KEY 가 없어 로그인 검사를 건너뜁니다.');
   }
 
   const key = process.env.GEMINI_API_KEY;
