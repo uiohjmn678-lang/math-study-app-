@@ -599,6 +599,21 @@ const JOB_FIRST_SIGN_MS = 25 * 1000;
 //   파일을 되돌릴 필요 없이 이 한 줄만 고치면 된다.
 const USE_BACKGROUND = true;
 
+// 사진 요청은 일반 함수로 보낸다 (백그라운드는 256KB 제한이라 사진이 안 들어감).
+// 일반 함수는 30초에 끊기므로 출력 토큰을 줄여 그 안에 끝나게 한다.
+const IMG_SYNC_MAX_TOKENS = 8000;
+const IMG_SYNC_THINK      = 2000;
+
+// 요청 안에 사진이 들어 있는지 본다
+function hasImage(body) {
+  try {
+    return (body.contents || []).some((c) =>
+      (c.parts || []).some((p) => p && (p.inline_data || p.inlineData)));
+  } catch (_) {
+    return false;
+  }
+}
+
 function newJobId() {
   if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
   return 'j' + Date.now() + Math.random().toString(36).slice(2, 10);
@@ -630,19 +645,52 @@ async function aiFetch(body) {
     return jobRes(401, { error: { message: '로그인이 필요합니다. 다시 로그인해 주세요.' } });
   }
 
+  // ── 사진이 든 요청은 일반 함수로 보낸다 ──────────────────────
+  // 두 함수의 한계가 정반대다.
+  //   일반 함수   : 요청 6MB 까지  / 실행 30초 까지
+  //   백그라운드  : 요청 256KB 까지 / 실행 15분 까지
+  // 사진은 수백 KB라 백그라운드로 보내면 413 으로 거절당한다.
+  // 대신 30초 안에 끝나야 하므로 출력 토큰을 줄여 시간을 맞춘다.
+  // (성적표를 읽고 약점 단원을 뽑는 데 24000 토큰은 필요하지 않다)
+  if (hasImage(body)) {
+    const gc = { ...(body.generationConfig || {}) };
+    gc.maxOutputTokens = Math.min(gc.maxOutputTokens || IMG_SYNC_MAX_TOKENS, IMG_SYNC_MAX_TOKENS);
+    gc.thinkingConfig = { thinkingBudget: IMG_SYNC_THINK };
+    // contents 는 참조로 그대로 둔다 (사진 base64 를 복사하지 않기 위해)
+    const sendBody = { ...body, generationConfig: gc };
+
+    const syncStr = JSON.stringify(sendBody);
+    const syncMB = syncStr.length / (1024 * 1024);
+    if (syncMB > 5) {
+      return jobRes(413, { error: { message:
+        `사진 용량이 너무 큽니다 (${syncMB.toFixed(1)}MB). 장수를 줄여 주세요.` } });
+    }
+    console.log(`[AI] 사진 요청 → 일반 함수 (${Math.round(syncStr.length / 1024)}KB, ` +
+      `최대 ${gc.maxOutputTokens}토큰)`);
+
+    try {
+      return await fetch(PROXY_URL, {
+        method: 'POST', headers: await aiHeaders(), body: syncStr
+      });
+    } catch (e) {
+      return jobRes(502, { error: {
+        message: '서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요.' } });
+    }
+  }
+  // ────────────────────────────────────────────────────────────
+
   const jobId = newJobId();
   const ref = doc(db, 'users', u.uid, 'jobs', jobId);
 
-  // 요청 크기를 미리 잰다.
-  // netlify dev 는 큰 요청을 받으면 "Stream body too big" 으로 통째로 죽고,
-  // 배포 환경의 함수에도 요청 크기 한도가 있다.
-  // 사진은 올릴 때 줄여 두지만 여러 장이면 합쳐서 넘을 수 있어 여기서 한 번 더 막는다.
+  // 백그라운드 함수는 요청을 256KB 까지만 받는다. 넘으면 413 이다.
+  // 사진은 위에서 이미 갈라냈으므로 여기 오는 건 글자뿐이라 보통 수십 KB다.
+  // 그래도 프롬프트가 길어질 수 있으니 한 번 막아 둔다.
   const reqBody = JSON.stringify({ jobId, payload: body });
-  const reqMB = reqBody.length / (1024 * 1024);
-  if (reqMB > 4) {
+  const reqKB = reqBody.length / 1024;
+  if (reqKB > 240) {
     return jobRes(413, { error: { message:
-      `보낼 내용이 너무 큽니다 (${reqMB.toFixed(1)}MB). ` +
-      `사진 장수를 줄이거나 더 작은 사진으로 다시 시도해 주세요.` } });
+      `보낼 내용이 너무 큽니다 (${Math.round(reqKB)}KB). ` +
+      `문제 수를 줄여 다시 시도해 주세요.` } });
   }
 
   // 결과를 기다릴 준비를 먼저 해둔다. 작업을 던지기 전에 걸어야 놓치지 않는다.

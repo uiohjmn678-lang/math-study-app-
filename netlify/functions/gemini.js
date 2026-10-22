@@ -16,8 +16,12 @@ const MODEL = 'gemini-2.5-flash';
 const ENDPOINT =
   `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
-const MAX_BODY = 8 * 1024 * 1024;   // 8MB — 성적표 사진 업로드를 넉넉히 감당
-const TIMEOUT_MS = 50 * 1000;       // Netlify 기본 함수 제한(10초)보다 길게 잡되, 유료/백그라운드 대비
+const MAX_BODY = 6 * 1024 * 1024;   // 6MB — Netlify 일반 함수의 요청 한도
+
+// Netlify 는 일반 함수를 30초에 강제 종료한다.
+// 그보다 조금 일찍 우리가 끊어야 "AI 응답이 오래 걸립니다" 라는 제대로 된 안내를
+// 돌려줄 수 있다. 30초를 넘기면 Netlify 가 먼저 죽여서 알 수 없는 오류가 뜬다.
+const TIMEOUT_MS = 26 * 1000;
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
