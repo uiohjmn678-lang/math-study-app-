@@ -775,6 +775,47 @@ const GEMINI_URL = DIRECT ? DIRECT_URL : PROXY_URL;
 // 검증용: 출제와 동일한 2.5-flash(사고형)로 직접 풀어 정답을 깐깐하게 대조
 const VERIFY_URL = GEMINI_URL;
 
+// ============ 사고 과정이 본문으로 새어 나왔는지 가려낸다 ============
+// gemini-2.5-flash 는 생각하는 모델이다. 사고 예산을 다 쓰고도 결론에 이르지
+// 못하면, 생각하던 내용을 그대로 답변 본문에 이어서 써버린다. 사고는 영어로
+// 하기 때문에 학생 화면에 영어 혼잣말이 쏟아진다.
+//   "Ah, I must have made a mistake... Let's restart... This is the same issue."
+// 문제가 모순이라 정답에 도달할 수 없을 때 특히 잘 생긴다.
+// 이런 응답은 보여 주지 않고 실패로 처리한다.
+const _SPILL_TELLS = [
+  /\bI must have made a mistake\b/i,
+  /\bThere must be a mistake\b/i,
+  /\bLet'?s\s+(restart|re-?examine|re-?check|re-?calculate|try again|reconsider)\b/i,
+  /\bLet me\s+(reconsider|re-?examine|re-?calculate|recompute|try again)\b/i,
+  /\bThis is the same (issue|problem)\b/i,
+  /\bprevious thought process\b/i,
+  /\bWait,\s/,
+  /\bHmm,\s/,
+];
+function looksLikeThoughtSpill(raw) {
+  if (!raw) return false;
+  const t = String(raw);
+  if (_SPILL_TELLS.some((re) => re.test(t))) return true;
+
+  // 수식을 빼고 남은 '말' 중 한국어 비율이 너무 낮으면 사고 유출로 본다.
+  // 수식·LaTeX 명령에는 알파벳이 많아서, 빼고 세지 않으면 멀쩡한 해설도 걸린다.
+  const prose = t
+    .replace(/\$[^$]*\$/g, ' ')        // $...$ 수식
+    .replace(/\\[a-zA-Z]+/g, ' ')      // \frac 같은 명령
+    .replace(/[^A-Za-z가-힣]/g, '');
+  if (prose.length < 200) return false;           // 짧은 답은 판단하지 않는다
+  const ko = (prose.match(/[가-힣]/g) || []).length;
+  return ko / prose.length < 0.12;
+}
+
+// 재시도할 때 덧붙이는 못박기 문구
+const _KO_GUARD = `
+
+★ 반드시 한국어로만 작성하라. 영어 문장 금지.
+★ 생각하는 과정을 쓰지 말고, 정리된 결과만 위 형식 그대로 출력하라.
+★ "다시 계산해보자", "틀린 것 같다", "Let's", "Wait" 같은 재검토 문구 금지.
+★ 계산이 정답과 맞지 않아도 되돌아가지 말고 첫 번째 풀이를 그대로 제시하라.`;
+
 async function callGemini(prompt, maxTokens = 24000, thinkOverride = null) {
   if (!state.apiKey) return null;
   const parts = [{ text: prompt }];
@@ -803,7 +844,29 @@ async function callGemini(prompt, maxTokens = 24000, thinkOverride = null) {
         console.warn('[Gemini] 출력이 토큰 한도로 잘렸습니다. maxOutputTokens를 더 늘리세요.');
       }
       const rparts = cand?.content?.parts || [];
-      return rparts.filter(p => p.text && !p.thought).map(p => p.text).join('') || '';
+      const text = rparts.filter(p => p.text && !p.thought).map(p => p.text).join('') || '';
+
+      // ⭐ 사고 과정이 새어 나왔으면 보여 주지 않는다.
+      //    생각할 자리와 쓸 자리를 함께 넓혀서 다시 시킨다.
+      if (looksLikeThoughtSpill(text)) {
+        console.warn(`[Gemini] 사고 과정이 본문으로 새어 나왔습니다. (시도 ${attempt})`);
+        if (attempt < 3) {
+          const gc = body.generationConfig;
+          gc.maxOutputTokens = Math.min(maxTokens * 2, 24000);
+          gc.thinkingConfig.thinkingBudget = Math.min(
+            Math.max(gc.thinkingConfig.thinkingBudget * 2, 4000),
+            Math.max(512, gc.maxOutputTokens - 1024)
+          );
+          body.contents[0].parts[0].text = prompt + _KO_GUARD;
+          continue;
+        }
+        // 세 번 다 샜으면 문제 자체가 모순일 가능성이 높다.
+        const spillErr = new Error('풀이를 제대로 만들지 못했어요. 이 문제가 잘못되었을 수 있어요.');
+        spillErr.isBusy = true;   // 기존 "다시 시도" 버튼 흐름을 그대로 쓴다
+        spillErr.isSpill = true;
+        throw spillErr;
+      }
+      return text;
     }
 
     const status = res.status;
@@ -840,7 +903,14 @@ async function callGeminiUrl(targetUrl, prompt, maxTokens = 2000) {
     if (res.ok) {
       const data = await res.json();
       const parts = data.candidates?.[0]?.content?.parts || [];
-      return parts.filter(p => p.text && !p.thought).map(p => p.text).join('') || '';
+      const text = parts.filter(p => p.text && !p.thought).map(p => p.text).join('') || '';
+      // 검증 응답에 사고 과정이 새어 나왔으면 빈 값으로 돌린다.
+      // 빈 값 = 검증 실패 = 문항 폐기. 애매하면 버리는 쪽이 안전하다.
+      if (looksLikeThoughtSpill(text)) {
+        console.warn('[Gemini/검증] 사고 과정 유출 → 검증 실패로 처리합니다.');
+        return '';
+      }
+      return text;
     }
     const status = res.status;
     if (status === 503 || status === 429) {
@@ -895,6 +965,25 @@ function initApp() {
   document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => navigateTo(btn.dataset.page));
   });
+
+  // 로고를 누르면 홈으로. 사람들이 배우지 않아도 이미 아는 규칙이라,
+  // 눌리지 않으면 "눌러봤는데 아무 일도 안 일어나는" 경험이 된다.
+  // HTML 의 <div> 를 그대로 두고 여기서 버튼처럼 만든다.
+  // (div 는 Tab 으로 닿지도 않고 Enter 로 눌리지도 않아서 직접 달아 준다)
+  const headerLogo = document.querySelector('.header-logo');
+  if (headerLogo) {
+    headerLogo.setAttribute('role', 'button');
+    headerLogo.setAttribute('tabindex', '0');
+    headerLogo.setAttribute('aria-label', '홈으로 이동');
+    headerLogo.title = '홈으로';
+    headerLogo.addEventListener('click', () => navigateTo('home'));
+    headerLogo.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();               // 스페이스로 화면이 내려가지 않게
+        navigateTo('home');
+      }
+    });
+  }
 
   // 탭 이벤트
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -2937,6 +3026,102 @@ function parseAiVerdict(raw) {
 // ============ 정답 비교 (코드가 직접 판정 — AI 판정 신뢰 안 함) ============
 // 객관식 기호 ①②③④⑤ ↔ 숫자 1~5 상호 변환
 const _CIRCLED_NUMS = ['①','②','③','④','⑤'];
+
+// ============ 눈에는 같아 보이는 다른 글자들을 하나로 맞춘다 ============
+// 손글씨 판독 AI는 '/' 대신 분수선 '⁄'(U+2044), '-' 대신 빼기표 '−'(U+2212) 를
+// 돌려줄 때가 있다. 화면에는 똑같이 보이지만 코드에는 다른 글자다.
+// 아래에서 맞춰 주지 않으면 정리 단계에서 소리 없이 지워져서
+//   2⁄3  →  "23"      (맞는 답이 오답이 되고)
+//   −1/4 →  "1/4"     (틀린 답이 정답이 된다 ← 이쪽이 더 위험)
+const _VULGAR = {
+  '½':'(1/2)','⅓':'(1/3)','⅔':'(2/3)','¼':'(1/4)','¾':'(3/4)',
+  '⅕':'(1/5)','⅖':'(2/5)','⅗':'(3/5)','⅘':'(4/5)','⅙':'(1/6)','⅚':'(5/6)',
+  '⅐':'(1/7)','⅛':'(1/8)','⅜':'(3/8)','⅝':'(5/8)','⅞':'(7/8)',
+  '⅑':'(1/9)','⅒':'(1/10)',
+};
+// ※ 아래 정규식은 \u 이스케이프로 적는다. 눈에 안 보이거나 서로 비슷하게 생긴
+//    글자들이라, 실제 글자로 적어 두면 편집기나 복붙 과정에서 조용히 깨진다.
+//    깨져도 문법 오류가 나지 않아서 아무도 모르는 채 무력화된다.
+function unifySymbols(src) {
+  let s = String(src == null ? '' : src);
+  s = s.replace(/[⁄∕／÷∶]/g, '/');                     // 분수선·나눗셈 → /
+  s = s.replace(/[−－‐‑‒–—―➖]/g, '-'); // 빼기표·대시 → -
+  s = s.replace(/[＋➕]/g, '+');                                      // 전각 플러스 → +
+  s = s.replace(/[   　]/g, ' ');                          // 각종 공백 → 보통 공백
+  s = s.replace(/[０-９]/g, (c) =>                                    // ０-９ → 0-9
+        String.fromCharCode(c.charCodeAt(0) - 0xFF10 + 0x30));
+  s = s.replace(/[¼-¾⅐-⅞]/g, (c) => _VULGAR[c] || c);     // ½ ⅔ ¼ … → 1/2 2/3 1/4
+  return s;
+}
+
+// {...} 한 덩어리를 중괄호 짝을 맞춰 읽는다. s[i] 가 '{' 일 때 호출.
+// 반환 { body: 중괄호 안, end: 닫는 '}' 다음 위치 }
+// \frac12 처럼 중괄호 없이 한 글자만 오는 표기도 받아 준다.
+function _readGroup(s, i) {
+  if (s[i] !== '{') return { body: s[i] || '', end: i + 1 };
+  let depth = 0;
+  for (let j = i; j < s.length; j++) {
+    if (s[j] === '{') depth++;
+    else if (s[j] === '}') {
+      depth--;
+      if (depth === 0) return { body: s.slice(i + 1, j), end: j + 1 };
+    }
+  }
+  return { body: s.slice(i + 1), end: s.length };   // 안 닫힌 경우
+}
+
+// LaTeX → 평문.  \frac{1}{4} → (1)/(4),  \sqrt{3} → √(3),  \pi → π
+//
+// ★ 이 단계가 없으면 안 된다:
+//   중괄호를 먼저 지우면 \frac{1}{4} 가 "14" 가 돼서 1/4 과 영영 달라진다.
+//   분수·근호 정답이 전부 오답 처리되던 원인이 이것이었다.
+function latexToPlain(src) {
+  let s = String(src);
+
+  // 보기용으로만 붙은 것들 먼저 제거
+  s = s.replace(/\$+/g, '');
+  s = s.replace(/\\(?:left|right|displaystyle|quad|qquad)\b/g, '');
+  s = s.replace(/\\[,;:!]/g, '');
+  s = s.replace(/\\(?:text|mathrm|mathbf|operatorname)\s*\{/g, '{');
+
+  let out = '';
+  for (let i = 0; i < s.length; ) {
+    const rest = s.slice(i);
+
+    // \frac{a}{b} · \dfrac · \tfrac · \cfrac
+    let m = rest.match(/^\\[dtc]?frac\s*/);
+    if (m) {
+      const a = _readGroup(s, i + m[0].length);
+      const b = _readGroup(s, a.end);
+      out += '(' + latexToPlain(a.body) + ')/(' + latexToPlain(b.body) + ')';
+      i = b.end;
+      continue;
+    }
+
+    // \sqrt{a} · \sqrt[n]{a}  (n제곱근은 비교 대상이 거의 없어 √ 로만 적는다)
+    m = rest.match(/^\\sqrt\s*(?:\[[^\]]*\]\s*)?/);
+    if (m) {
+      const a = _readGroup(s, i + m[0].length);
+      out += '√(' + latexToPlain(a.body) + ')';
+      i = a.end;
+      continue;
+    }
+
+    out += s[i];
+    i++;
+  }
+  s = out;
+
+  // 남은 기호 명령·유니코드 기호 치환
+  s = s.replace(/\\pi\b/g, 'π');
+  s = s.replace(/\\(?:times|cdot)\b/g, '*');
+  s = s.replace(/\\div\b/g, '/');
+  s = s.replace(/[×·]/g, '*').replace(/÷/g, '/');
+  s = s.replace(/\\%/g, '%');
+  s = s.replace(/\\[a-zA-Z]+/g, '');   // 그래도 남은 \명령 제거
+  return s;
+}
+
 function normalizeAnswer(ans) {
   if (ans === null || ans === undefined) return '';
   let s = String(ans).trim();
@@ -2944,14 +3129,24 @@ function normalizeAnswer(ans) {
   _CIRCLED_NUMS.forEach((c, i) => {
     s = s.replace(new RegExp(c, 'g'), String(i + 1));
   });
-  // LaTeX 껍데기 제거
-  s = s.replace(/\$+/g, '').replace(/\\[a-zA-Z]+\s*/g, '');
+  // 눈에는 같아 보이는 다른 글자(⁄ − ０ ½ …)를 먼저 맞춘다
+  s = unifySymbols(s);
+  // LaTeX 를 평문으로 (분수·근호를 푼 뒤에 중괄호를 지워야 안전하다)
+  s = latexToPlain(s);
   // 공백·쉼표 제거, 소문자화
   s = s.replace(/[\s,]/g, '').toLowerCase();
   // 흔한 수식 표기 정리
-  s = s.replace(/^\+/, '');            // 앞 + 제거
-  s = s.replace(/[{}()\[\]]/g, '');     // 괄호 제거
-  s = s.replace(/[^\d\-\/.a-z√π]/g, ''); // 나머지 기호 정리
+  s = s.replace(/^\+/, '');                  // 앞 + 제거
+  s = s.replace(/[{}\[\]]/g, '');             // 중괄호·대괄호 제거
+  s = s.replace(/[^\d\-\/.a-z√π()*]/g, '');   // 나머지 기호 정리
+  // 없어도 되는 괄호는 푼다: (1)/(4) → 1/4,  (√(3))/(2) → √3/2
+  let prev;
+  do {
+    prev = s;
+    s = s.replace(/\(([^()]*)\)/g, (whole, inner) =>
+      /^[\d.a-z√π]*$/.test(inner) ? inner : whole);
+  } while (s !== prev);
+  s = s.replace(/^\((.*)\)$/, '$1');          // 전체를 감싼 괄호 제거
   return s;
 }
 // 분수 문자열 → 숫자 (a/b 형태 지원)
@@ -2986,6 +3181,19 @@ async function doCheckAnswer(card, section) {
   const userAns = selectedBtn ? selectedBtn.dataset.val : (textInput ? textInput.value.trim() : '');
   if (!userAns) return null; // 미입력 → 스킵
 
+  // ⭐ 같은 카드를 두 번 채점하지 않는다.
+  //   카드마다 채점 버튼이 있고 아래에 "전체 정답 확인" 버튼이 또 있다.
+  //   개별로 채점한 뒤 전체 채점을 누르면 그 카드가 한 번 더 들어가서
+  //     · 푼 문제 수와 정답 수가 부풀고
+  //     · 단원별 정답률이 어긋나고
+  //     · 오답노트에 같은 문제가 두 번 쌓이고
+  //     · AI 호출이 한 번 더 나가 돈이 더 든다.
+  //   "다시 채점하기" 를 누르면 그 화면의 모든 문제가 통째로 또 들어갔다.
+  const alreadyGraded = card.dataset.graded === '1';
+  if (alreadyGraded && card.dataset.gradeOk === '1') {
+    return card.dataset.gradedCorrect === '1';   // 풀이까지 받아 둔 카드는 그대로 둔다
+  }
+
   const resultBox = document.getElementById(`result-${section}-${idx}`);
   if (!resultBox) return null;
   resultBox.classList.remove('hidden');
@@ -2994,18 +3202,27 @@ async function doCheckAnswer(card, section) {
   const problemText = card.dataset.problem
     ? decodeURIComponent(card.dataset.problem)
     : card.querySelector('.multi-problem-body').innerText;
-  const prompt = `문제: ${problemText}\n정답: ${correctAnswer}\n학생 답: ${userAns}\n\n★ 이 문제의 정답은 [${correctAnswer}]로 확정되어 있다. 정답이 [${correctAnswer}]가 되는 가장 매끄러운 풀이 "한 가지"만 제시하라.\n★ 절대 금지: 풀이를 두 번 쓰기, 🎯핵심/📋자세한 풀이 등 섹션 헤더를 두 번 출력하기, "이 해석으로는 답이 안 나온다"는 검토 반복, 같은 계산을 두 번 풀기. 계산 결과가 정답과 달라도 재시도하지 말고 첫 번째 계산을 그대로 제시하라. 각 섹션 헤더는 딱 한 번만 출력하라.\n\n마크다운 기호(#, * 등) 금지. 모든 수식은 $...$ LaTeX 형식. 벡터는 \\overrightarrow{} 사용.\n\n🎯 핵심\n(이 문제를 푸는 핵심 아이디어·개념을 1~2문장으로 짧게. 풀이의 열쇠만.)\n\n📋 자세한 풀이\n(반드시 "1단계:", "2단계:" 형식으로 시작하는 단계별 풀이. 전체 5단계 이내. 각 단계는 1~2문장으로 간결하게, 핵심 계산만. ★경우의 수를 셀 때 모든 경우를 일일이 나열하지 말 것 — 대표 1~2개만 보이고 나머지는 "같은 방식으로 ○가지"처럼 한 줄로 줄여라. 동일 케이스 반복·전수나열·표 금지. 정답 [${correctAnswer}]에 이르는 한 줄기 풀이만 쓰고 다른 해석·재검토는 쓰지 말 것.)\n\n💡 핵심 팁\n(핵심과 겹치지 말 것. 이 유형에서 자주 하는 실수 1~2줄만.)\n\n∴ 최종 답: ${correctAnswer}`;
+  const prompt = `문제: ${problemText}\n정답: ${correctAnswer}\n학생 답: ${userAns}\n\n★ 이 문제의 정답은 [${correctAnswer}]로 확정되어 있다. 정답이 [${correctAnswer}]가 되는 가장 매끄러운 풀이 "한 가지"만 제시하라.\n★ 절대 금지: 풀이를 두 번 쓰기, 🎯핵심/📋자세한 풀이 등 섹션 헤더를 두 번 출력하기, "이 해석으로는 답이 안 나온다"는 검토 반복, 같은 계산을 두 번 풀기. 계산 결과가 정답과 달라도 재시도하지 말고 첫 번째 계산을 그대로 제시하라. 각 섹션 헤더는 딱 한 번만 출력하라.\n\n반드시 한국어로만 작성. 영어 문장 금지. 마크다운 기호(#, * 등) 금지. 모든 수식은 $...$ LaTeX 형식. 벡터는 \\overrightarrow{} 사용.\n\n🎯 핵심\n(이 문제를 푸는 핵심 아이디어·개념을 1~2문장으로 짧게. 풀이의 열쇠만.)\n\n📋 자세한 풀이\n(반드시 "1단계:", "2단계:" 형식으로 시작하는 단계별 풀이. 전체 5단계 이내. 각 단계는 1~2문장으로 간결하게, 핵심 계산만. ★경우의 수를 셀 때 모든 경우를 일일이 나열하지 말 것 — 대표 1~2개만 보이고 나머지는 "같은 방식으로 ○가지"처럼 한 줄로 줄여라. 동일 케이스 반복·전수나열·표 금지. 정답 [${correctAnswer}]에 이르는 한 줄기 풀이만 쓰고 다른 해석·재검토는 쓰지 말 것.)\n\n💡 핵심 팁\n(핵심과 겹치지 말 것. 이 유형에서 자주 하는 실수 1~2줄만.)\n\n∴ 최종 답: ${correctAnswer}`;
 
   // ⭐ 정답 판정은 코드가 직접 한다 (AI 텍스트 파싱 신뢰 안 함)
   const isCorrect = isAnswerCorrect(userAns, correctAnswer);
+
+  // 집계는 카드당 한 번만. 풀이를 다시 받아 오는 경우에도 중복으로 세지 않는다.
+  card.dataset.graded = '1';
+  card.dataset.gradedCorrect = isCorrect ? '1' : '0';
+  const countOnce = (type, source) => {
+    if (alreadyGraded) return;
+    incrementProblems(isCorrect, problemText, userAns, correctAnswer, type, source);
+  };
 
   try {
     const result = await callGemini(prompt, 5500, 2000);
     resultBox.innerHTML = renderFeedback(result, isCorrect, true, correctAnswer);
     renderMath(resultBox);
+    card.dataset.gradeOk = '1';   // 풀이까지 받았으니 이 카드는 끝
     const type = card.dataset.type || card.querySelector('[style*="text2"]')?.textContent || '';
     const source = card.dataset.source === 'db' ? 'suneung' : 'ai';
-    incrementProblems(isCorrect, problemText, userAns, correctAnswer, type, source);
+    countOnce(type, source);
     return isCorrect;
   } catch(e) {
     const isBusy = e && e.isBusy;
@@ -3021,9 +3238,10 @@ async function doCheckAnswer(card, section) {
     const why = isBusy ? 'AI 서버가 혼잡해서 풀이 설명을 불러오지 못했어요.' : `풀이 설명을 불러오지 못했어요. (${e.message})`;
     resultBox.innerHTML = `${verdictHtml}<div style="color:var(--text2);font-size:0.85rem;margin-top:8px;">${why}</div>${retryBtn}`;
     renderMath(resultBox);
+    // gradeOk 는 세우지 않는다 → 풀이는 나중에 다시 받아 올 수 있다.
     const type = card.dataset.type || '';
     const source = card.dataset.source === 'db' ? 'suneung' : 'ai';
-    incrementProblems(isCorrect, problemText, userAns, correctAnswer, type, source);
+    countOnce(type, source);
     return isCorrect;
   }
 }
@@ -3541,7 +3759,7 @@ async function checkIntensive() {
 
   const prompt = `문제: ${state.currentProblem}
 학생 답: ${ans}
-마크다운 기호 절대 사용 금지. 아래 형식으로만:
+반드시 한국어로만 작성. 영어 문장 금지. 마크다운 기호 절대 사용 금지. 아래 형식으로만:
 
 판정: ✅ 정답 / ❌ 오답 중 하나만
 정답: (객관식이면 ①②③④⑤ 번호, 서술형이면 값)
@@ -3587,9 +3805,12 @@ function renderFeedback(raw, isCorrect, compact = false, trueAnswer = '') {
     const answerMatch = text.match(/^정답[：:]\s*(.+)$/m);
     answerText = answerMatch ? answerMatch[1].trim() : '';
   }
+  // escapeHtml 필수: 정답이 부등식(x<3, a<b)이면 브라우저가 <3 부터를 태그로 먹어
+  // "정답:" 뒤가 통째로 사라진다. 학생이 매 문제마다 보는 줄이라 제일 먼저 막아야 한다.
+  const answerHtml = escapeHtml(answerText);
   const verdict = isCorrect
-    ? `<div class="feedback-verdict correct">✅ 정답!${answerText ? ` <span style="font-size:0.9rem;opacity:0.85">(${answerText})</span>` : ''}</div>`
-    : `<div class="feedback-verdict wrong">❌ 오답${answerText ? ` <span style="font-size:0.9rem;opacity:0.85">— 정답: ${answerText}</span>` : ''}</div>`;
+    ? `<div class="feedback-verdict correct">✅ 정답!${answerText ? ` <span style="font-size:0.9rem;opacity:0.85">(${answerHtml})</span>` : ''}</div>`
+    : `<div class="feedback-verdict wrong">❌ 오답${answerText ? ` <span style="font-size:0.9rem;opacity:0.85">— 정답: ${answerHtml}</span>` : ''}</div>`;
 
   // collapse:true 인 섹션은 compact 모드에서 "자세한 풀이 보기" 토글 안으로 들어감
   const sectionMap = [
@@ -4808,7 +5029,11 @@ function renderLevelTestPage() {
     if (!it.userAns) return;
     const card = list.querySelectorAll('.multi-problem-card')[i];
     if (!card) return;
-    const btn = card.querySelector(`.choice-btn[data-val="${it.userAns}"]`);
+    // 답에 따옴표가 섞이면 선택자 문법이 깨져 querySelector 가 예외를 던지고,
+    // 그러면 복원이 통째로 중단된다. 선택지 복원은 실패해도 되는 일이라 감싸 둔다.
+    let btn = null;
+    try { btn = card.querySelector(`.choice-btn[data-val="${CSS.escape(String(it.userAns))}"]`); }
+    catch (_) { btn = null; }
     if (btn) btn.classList.add('selected');
     const inp = card.querySelector('.multi-ans-input');
     if (inp) inp.value = it.userAns;
@@ -4881,15 +5106,35 @@ function ltEstimateGrade(p2, p3) {
   // 기초가 무너졌다고 보려면 3점까지 같이 약해야 한다.
   const basicsBroken = p2 < 0.5 && p3 < 0.5;
 
+  let grade;
+  if (basicsBroken || score < 0.30) grade = '8~9등급';
+  else if (score < 0.45)            grade = '7등급';
+  else if (score < 0.60)            grade = '6등급';
+  else if (score < 0.75)            grade = '5등급';
+  else if (score < 0.88)            grade = '4등급';
+  else                              grade = '3등급 이상';
+
+  // ⭐ 메모는 등급이 아니라 실제 정답률에서 만든다.
+  //   등급은 2점·3점을 섞은 점수로 정하는데, 메모를 등급 구간에 매달아 두면
+  //   사실과 반대되는 말을 하게 된다. 실제로 이런 경우가 나왔다:
+  //     2점 100% · 3점 45% → 5등급 → "3점을 절반 넘게 맞혀요"    (틀린 말)
+  //     2점   0% · 3점 70% → 6등급 → "3점을 절반 이하로 맞혔어요" (틀린 말)
+  //   약점을 짚어 주는 앱이 학생의 성적을 틀리게 말하면 안 된다.
+  let note;
   if (basicsBroken) {
-    return { grade: '8~9등급', note: '2점 문제도 절반을 못 맞혔어요. 공식과 기본 개념부터 다시 쌓아야 해요.' };
+    note = '2점과 3점 모두 절반을 못 넘겼어요. 공식과 기본 개념부터 다시 쌓아야 해요.';
+  } else if (p2 < 0.5) {
+    note = '3점은 버티는데 2점에서 흘리고 있어요. 기본 개념을 한 번 정리하면 바로 올라가요.';
+  } else if (p3 < 0.34) {
+    note = '기본 공식은 되는데 개념을 두 개 엮으면 막혀요. 3점 연습이 지금 할 일이에요.';
+  } else if (p3 < 0.67) {
+    note = '3점에서 절반쯤 맞혀요. 여기가 지금 올릴 구간이에요.';
+  } else if (p3 < 0.9) {
+    note = '3점은 거의 잡았어요. 남은 건 4점 연습이에요.';
+  } else {
+    note = '2·3점은 충분히 잡았어요. 이 테스트로는 여기까지만 잴 수 있어요.';
   }
-  if (score < 0.30) return { grade: '8~9등급', note: '기초 개념부터 차근차근 가야 해요. 2점 문제로 먼저 자신감을 쌓아요.' };
-  if (score < 0.45) return { grade: '7등급',   note: '기본 공식은 어느 정도 되는데 개념을 두 개 엮으면 막혀요.' };
-  if (score < 0.60) return { grade: '6등급',   note: '3점 문제를 절반 이하로 맞혔어요. 여기가 지금 올릴 구간이에요.' };
-  if (score < 0.75) return { grade: '5등급',   note: '3점을 절반 넘게 맞혀요. 나머지를 채우면 4등급이 보여요.' };
-  if (score < 0.88) return { grade: '4등급',   note: '3점은 거의 잡았어요. 이제 4점 연습으로 넘어갈 때예요.' };
-  return { grade: '3등급 이상', note: '2·3점은 충분히 잡았어요. 이 테스트로는 여기까지만 잴 수 있어요.' };
+  return { grade, note };
 }
 
 function ltSummarize() {
@@ -5043,9 +5288,11 @@ window.ltReview = function () {
       </div>
       <div style="margin-bottom:8px;">${renderProblemHTML(it.visibleText)}</div>
       <div style="font-size:0.86rem;">
-        <span style="color:var(--red,#FF6B6B);">내 답 ${it.userAns || '-'}</span>
+        <!-- escapeHtml 필수: 부등식 답(x<3, a<b)을 그냥 넣으면 브라우저가 태그로 먹어
+             답이 통째로 사라진다. $...$ 안의 수식은 escape 후에도 MathJax 가 제대로 읽는다. -->
+        <span style="color:var(--red,#FF6B6B);">내 답 ${escapeHtml(it.userAns || '-')}</span>
         <span style="color:var(--text3);margin:0 6px;">|</span>
-        <span style="color:var(--green,#34C759);">정답 ${it.answer}</span>
+        <span style="color:var(--green,#34C759);">정답 ${escapeHtml(it.answer || '')}</span>
       </div>
     </div>`).join('');
   box.innerHTML = `<h3>❌ 틀린 문제 ${wrong.length}개</h3>${html}
@@ -5054,13 +5301,16 @@ window.ltReview = function () {
 };
 
 window.renderLevelTestIntro = renderLevelTestIntro;
+// ⭐ 틀린 문제 목록의 "결과로 돌아가기" 버튼이 onclick 으로 이걸 부른다.
+//    script.js 는 type="module" 로 실려서 모듈 안의 함수는 전역이 아니다.
+//    여기서 내보내지 않으면 버튼을 눌러도 아무 일도 일어나지 않는다.
+window.renderLevelTestResult = renderLevelTestResult;
 
 window.closeModal = closeModal;
 window.saveSettings = saveSettings;
 window.switchSettingsTab = switchSettingsTab;
 window.switchChartTab = switchChartTab;
 window.onUnitChartChange = onUnitChartChange;
-window.checkAllAnswers = checkAllAnswers;
 window.switchUploadMode = switchUploadMode;
 window.setPdfAction = setPdfAction;
 window.handleDrop = handleDrop;
@@ -5124,11 +5374,14 @@ function hwPrompt() {
 // AI가 sqrt(3) 로 돌려준 것을 사람이 보는 표기로 바꾼다.
 // √ 를 직접 쓰게 하면 판독이 불안정해서, 받을 때는 아스키로 받고 여기서 변환한다.
 function hwNormalize(s) {
-  let t = String(s || '').replace(/[`"'\n\r]/g, '').trim();
+  // 판독 결과에 섞여 오는 유니코드 변형(⁄ − ½ …)을 입력칸에 넣기 전에 맞춘다.
+  // 입력칸에 보이는 글자와 채점이 읽는 글자가 어긋나지 않게 하려는 것.
+  let t = unifySymbols(s).replace(/[`"'\n\r]/g, '').trim();
   t = t.replace(/(\d)\s*\*\s*sqrt\s*\(\s*([^)]+?)\s*\)/gi, '$1√$2');  // 2*sqrt(3) → 2√3
   t = t.replace(/sqrt\s*\(\s*([^)]+?)\s*\)/gi, '√$1');                 // sqrt(3)   → √3
   t = t.replace(/(\d)\s*\*\s*√/g, '$1√');                              // 2*√3      → 2√3
   t = t.replace(/\s+/g, '');
+  t = t.replace(/^\(([^()]*)\)$/, '$1');   // (2/3) → 2/3  학생 눈에 괄호가 거슬리지 않게
   return t;
 }
 

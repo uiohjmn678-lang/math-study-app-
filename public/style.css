@@ -70,6 +70,30 @@ a:hover { text-decoration: underline; }
   backdrop-filter: blur(12px);
 }
 .header-logo { font-size: 1.4rem; font-weight: 900; letter-spacing: -1px; flex-shrink: 0; color: var(--text); }
+
+/* 로고 = 홈 버튼.
+   script.js 가 role="button" 을 붙였을 때만 누를 수 있게 보이도록 한다.
+   자바스크립트가 못 붙은 상황에서 눌릴 것처럼 보이면 더 나쁘기 때문이다. */
+.header-logo[role="button"] {
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  padding: 2px 6px;
+  margin-left: -6px;              /* 패딩만큼 당겨 원래 위치 유지 */
+  border-radius: var(--radius-sm, 8px);
+  transition: background-color 0.15s ease, transform 0.08s ease;
+}
+.header-logo[role="button"]:hover  { background: rgba(74,144,226,0.08); }
+.header-logo[role="button"]:active { transform: scale(0.97); }
+.header-logo[role="button"]:focus-visible {
+  outline: 2px solid var(--accent, #4A90E2);
+  outline-offset: 2px;
+}
+/* 터치 기기에선 hover 가 누른 뒤에도 남아 있어서, 홈이 아닌데 눌린 것처럼 보인다 */
+@media (hover: none) {
+  .header-logo[role="button"]:hover { background: transparent; }
+}
+
 .header-nav { display: flex; gap: 4px; flex: 1; }
 .nav-btn { background: none; border: none; cursor: pointer; color: var(--text2); font-size: 0.85rem; font-weight: 600; padding: 8px 16px; border-radius: var(--radius-sm); transition: all 0.2s; font-family: 'Pretendard', sans-serif; }
 .nav-btn:hover { color: var(--accent); background: rgba(74,144,226,0.08); }
