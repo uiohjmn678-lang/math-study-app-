@@ -364,7 +364,7 @@ async function generateVerifiedProblem(type, opt = {}, maxTries = 2) {
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, collection, getDocs, query, where, limit, onSnapshot, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, collection, getDocs, query, where, limit, onSnapshot, deleteDoc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCf-4hUar_Ub7ukMkaHxFlvHyvnjulK5_g",  authDomain: "math-study-app-16f56.firebaseapp.com",
@@ -2906,6 +2906,8 @@ function attachChoiceListeners(wrap) {
   // 주관식 입력칸에만 손글씨 UI를 붙인다.
   // (객관식 카드는 입력칸 자체가 만들어지지 않으므로 자연히 제외된다)
   wrap.querySelectorAll('.multi-ans-input').forEach((el) => attachHandwriting(el));
+  // 신고 버튼은 객관식·주관식 모두에 붙인다
+  attachReportToCards(wrap);
 }
 
 window.showMultiHint = function(btn) {
@@ -3354,6 +3356,16 @@ DESMOS_END
     bAns.value = '';
     attachHandwriting(bAns);                     // 손글씨 UI (이미 붙었으면 그냥 넘어감)
     setAnswerInputVisible(bAns, !hasChoices);    // 객관식이면 입력칸과 손글씨를 같이 숨긴다
+
+    const bWrap = document.getElementById('basicInput');
+    attachReportButton(bWrap, () => ({
+      problem: state.currentProblem || '',
+      answer: state.currentAnswer || '',
+      studentAnswer: selectedChoice || bAns.value || '',
+      type: document.getElementById('mathType')?.value || '',
+      source: 'basic',
+    }));
+    resetReport(bWrap);                          // 앞 문제에서 신고했어도 새 문제엔 다시 쓸 수 있게
     selectedChoice = '';
   } catch (e) {
     problemBox.innerHTML = `<span style="color:var(--red)">오류: ${e.message}</span>`;
@@ -3503,6 +3515,13 @@ async function startIntensive() {
       const iAns = document.getElementById('intensiveAns');
       attachHandwriting(iAns, iAns.closest('.ans-row'));   // flex 줄 아래에 붙인다
     }
+    attachReportButton(inputArea, () => ({
+      problem: state.currentProblem || '',
+      answer: state.currentAnswer || '',
+      studentAnswer: selectedChoice || document.getElementById('intensiveAns')?.value || '',
+      type: state.selectedWeakType || '',
+      source: 'intensive',
+    }));
     selectedChoice = '';
   } catch (e) {
     problemBox.innerHTML = `<span style="color:var(--red)">오류: ${e.message}</span>`;
@@ -5327,4 +5346,136 @@ function setAnswerInputVisible(input, visible) {
   if (!input) return;
   input.style.display = visible ? '' : 'none';
   if (input._hwBox) input._hwBox.classList.toggle('hidden', !visible);
+}
+
+
+// ============================================================
+//  문제 신고 ("이 문제 이상해요")
+//
+//  왜 필요한가
+//    문제를 AI가 만들고 AI가 검증한다. 두 검증기가 같은 착각을 하면
+//    불량 문제가 통과한다 — 그게 이 구조에 남은 유일한 구멍이다.
+//    그 구멍이 실제로 얼마나 되는지는 "사람이 걸러낸 수"로만 잴 수 있다.
+//    이 버튼이 그 측정 장치다.
+//
+//  어디에 쌓이나
+//    users/{uid}/reports/{자동ID}
+//    기존 보안 규칙(users/{userId}/{document=**})이 그대로 덮으므로
+//    규칙을 새로 쓸 필요가 없다. 모아 보는 건 reports.js 로 한다.
+// ============================================================
+
+const REPORT_REASONS = [
+  '보기에 답이 없어요',
+  '조건이 모순이에요',
+  '문제가 잘렸어요',
+  '정답이 틀린 것 같아요',
+  '해설이 이상해요',
+  '기타',
+];
+
+// 신고 버튼 + 패널을 container 안에 붙인다.
+// getCtx() 는 신고 시점에 문제 정보를 돌려주는 함수다.
+function attachReportButton(container, getCtx) {
+  if (!container || container.dataset.rpOn === '1') return;
+  container.dataset.rpOn = '1';
+
+  const wrap = document.createElement('div');
+  wrap.className = 'rp-wrap';
+  wrap.innerHTML = `
+    <button type="button" class="rp-open">🚩 이 문제 이상해요</button>
+    <div class="rp-panel hidden">
+      <div class="rp-title">어디가 이상한가요?</div>
+      <div class="rp-chips">
+        ${REPORT_REASONS.map((r) => `<button type="button" class="rp-chip">${r}</button>`).join('')}
+      </div>
+      <textarea class="rp-memo" rows="2" placeholder="자세히 적어주면 고치는 데 큰 도움이 돼요 (선택)"></textarea>
+      <div class="rp-actions">
+        <button type="button" class="rp-cancel">취소</button>
+        <button type="button" class="rp-send">보내기</button>
+      </div>
+      <div class="rp-msg"></div>
+    </div>`;
+  container.appendChild(wrap);
+
+  const panel = wrap.querySelector('.rp-panel');
+  const memo  = wrap.querySelector('.rp-memo');
+  const msg   = wrap.querySelector('.rp-msg');
+  let picked = '';
+
+  wrap.querySelector('.rp-open').onclick = () => {
+    panel.classList.toggle('hidden');
+    msg.textContent = '';
+  };
+  wrap.querySelector('.rp-cancel').onclick = () => {
+    panel.classList.add('hidden');
+  };
+  wrap.querySelectorAll('.rp-chip').forEach((c) => {
+    c.onclick = () => {
+      wrap.querySelectorAll('.rp-chip').forEach((x) => x.classList.remove('is-on'));
+      c.classList.add('is-on');
+      picked = c.textContent;
+      msg.textContent = '';
+    };
+  });
+
+  wrap.querySelector('.rp-send').onclick = async (e) => {
+    if (!picked) { msg.textContent = '어디가 이상한지 하나만 골라주세요.'; return; }
+    const u = auth.currentUser;
+    if (!u) { msg.textContent = '로그인이 필요해요.'; return; }
+
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    const old = btn.textContent;
+    btn.textContent = '보내는 중...';
+
+    try {
+      const ctx = (typeof getCtx === 'function' ? getCtx() : {}) || {};
+      await addDoc(collection(db, 'users', u.uid, 'reports'), {
+        reason: picked,
+        memo: (memo.value || '').slice(0, 500),
+        problem: String(ctx.problem || '').slice(0, 2000),
+        answer: String(ctx.answer || '').slice(0, 200),
+        studentAnswer: String(ctx.studentAnswer || '').slice(0, 200),
+        type: String(ctx.type || ''),
+        level: String(ctx.level || ''),
+        source: String(ctx.source || ''),   // 은행에서 나온 문제인지 라이브 생성인지
+        page: location.pathname,
+        at: serverTimestamp(),
+      });
+      panel.classList.add('hidden');
+      wrap.querySelector('.rp-open').textContent = '✅ 신고 접수됐어요';
+      wrap.querySelector('.rp-open').disabled = true;
+      memo.value = '';
+    } catch (err) {
+      msg.textContent = '신고를 보내지 못했어요: ' + err.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = old;
+    }
+  };
+}
+
+// 수능 모드 카드마다 신고 버튼을 붙인다. 카드에 문제 정보가 data- 로 들어 있다.
+function attachReportToCards(wrap) {
+  if (!wrap) return;
+  wrap.querySelectorAll('.multi-problem-card').forEach((card) => {
+    const area = card.querySelector('.multi-answer-area') || card;
+    attachReportButton(area, () => ({
+      problem: decodeURIComponent(card.dataset.problem || ''),
+      answer: card.dataset.answer || '',
+      studentAnswer: card.querySelector('.multi-ans-input')?.value
+        || card.querySelector('.choice-btn.selected')?.textContent || '',
+      type: card.dataset.type || '',
+      level: card.dataset.level || '',
+      source: card.dataset.source || '',
+    }));
+  });
+}
+
+// 새 문제를 띄울 때 신고 버튼을 원래 상태로 되돌린다 (앞 문제에서 신고했으면 꺼져 있다)
+function resetReport(container) {
+  const b = container?.querySelector('.rp-open');
+  if (b) { b.disabled = false; b.textContent = '🚩 이 문제 이상해요'; }
+  container?.querySelector('.rp-panel')?.classList.add('hidden');
+  container?.querySelectorAll('.rp-chip').forEach((c) => c.classList.remove('is-on'));
 }
