@@ -5075,22 +5075,42 @@ window.navigateTo = navigateTo;
 //    주관식에는 답이 무엇이든 항상 같은 UI를 붙인다.
 // ============================================================
 
-const HW_MAX_TOKENS = 64;   // 답 몇 글자만 받으면 된다
+const HW_MAX_TOKENS = 256;  // 64 였더니 답이 잘려 나왔다. 짧은 답이라 비용 차이는 없다.
 const HW_THINK      = 0;    // 판독에 추론은 필요 없다. 사고 토큰도 출력 요금이다.
 const HW_HEIGHT     = 170;  // 캔버스 높이(px)
+const HW_PAD        = 24;   // 글씨 둘레 여백(px)
+const HW_OUT_MIN_H  = 420;  // 잘라낸 글씨를 최소 이 높이까지 키워서 보낸다
 
 function hwPrompt() {
   return [
-    '이 이미지는 학생이 손으로 쓴 수학 문제의 답이다.',
-    '쓰여 있는 값을 그대로 읽어서 한 줄로만 출력하라.',
+    '이미지에 손으로 쓴 수학 답이 하나 있다. 그 값을 그대로 읽어라.',
     '',
-    '규칙:',
-    '- 설명·풀이·단위·따옴표 없이 값만 출력한다.',
-    '- 분수는 1/3 형태로 쓴다.',
-    '- 루트는 √2 형태로 쓴다.',
-    '- 거듭제곱은 2^3 형태로 쓴다.',
-    '- 알아볼 수 없으면 ? 한 글자만 출력한다.',
+    '출력 규칙:',
+    '- 값만 한 줄로 출력한다. 설명·풀이·단위·따옴표·마침표를 쓰지 마라.',
+    '- 분수는 1/3 처럼 슬래시로 쓴다.',
+    '- 루트는 sqrt(3) 처럼 쓴다. (√ 기호를 쓰지 마라)',
+    '- 거듭제곱은 2^3 처럼 쓴다.',
+    '- 계수가 붙은 루트는 2*sqrt(3) 처럼 곱셈 기호를 넣어 쓴다.',
+    '- 전혀 알아볼 수 없을 때만 ? 한 글자를 출력한다.',
+    '',
+    '예시:',
+    '  2√3  →  2*sqrt(3)',
+    '  √5   →  sqrt(5)',
+    '  ⅓ 또는 1/3  →  1/3',
+    '  2³   →  2^3',
+    '  -7   →  -7',
   ].join('\n');
+}
+
+// AI가 sqrt(3) 로 돌려준 것을 사람이 보는 표기로 바꾼다.
+// √ 를 직접 쓰게 하면 판독이 불안정해서, 받을 때는 아스키로 받고 여기서 변환한다.
+function hwNormalize(s) {
+  let t = String(s || '').replace(/[`"'\n\r]/g, '').trim();
+  t = t.replace(/(\d)\s*\*\s*sqrt\s*\(\s*([^)]+?)\s*\)/gi, '$1√$2');  // 2*sqrt(3) → 2√3
+  t = t.replace(/sqrt\s*\(\s*([^)]+?)\s*\)/gi, '√$1');                 // sqrt(3)   → √3
+  t = t.replace(/(\d)\s*\*\s*√/g, '$1√');                              // 2*√3      → 2√3
+  t = t.replace(/\s+/g, '');
+  return t;
 }
 
 // 입력칸 하나에 손글씨 UI를 붙인다. 이미 붙어 있으면 아무것도 하지 않는다.
@@ -5141,8 +5161,8 @@ function attachHandwriting(input, mountAfter) {
     const w = canvas.width / (window.devicePixelRatio || 1);
     const h = canvas.height / (window.devicePixelRatio || 1);
     ctx.clearRect(0, 0, w, h);
-    ctx.strokeStyle = '#1b2234';
-    ctx.lineWidth = 2.6;
+    ctx.strokeStyle = '#111111';   // 진한 검정이 판독에 유리하다
+    ctx.lineWidth = 3.4;           // 선이 가늘면 축소·압축에서 끊어져 보인다
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     strokes.forEach((s) => {
@@ -5157,6 +5177,26 @@ function attachHandwriting(input, mountAfter) {
       for (let i = 1; i < s.length; i++) ctx.lineTo(s[i].x, s[i].y);
       ctx.stroke();
     });
+  }
+
+  // 글씨가 실제로 차지한 사각형 (CSS 픽셀 기준). 둘레 여백을 잘라내기 위해 쓴다.
+  function inkBounds() {
+    const w = canvas.width / (window.devicePixelRatio || 1);
+    const h = canvas.height / (window.devicePixelRatio || 1);
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    strokes.forEach((s) => s.forEach((p) => {
+      if (p.x < x1) x1 = p.x;
+      if (p.y < y1) y1 = p.y;
+      if (p.x > x2) x2 = p.x;
+      if (p.y > y2) y2 = p.y;
+    }));
+    if (!isFinite(x1)) return { x1: 0, y1: 0, x2: w, y2: h };
+    x1 = Math.max(0, x1 - HW_PAD); y1 = Math.max(0, y1 - HW_PAD);
+    x2 = Math.min(w, x2 + HW_PAD); y2 = Math.min(h, y2 + HW_PAD);
+    // "1" 처럼 한 획만 그으면 폭이 거의 0이 된다. 최소 크기를 보장한다.
+    if (x2 - x1 < 48) { const c = (x1 + x2) / 2; x1 = Math.max(0, c - 24); x2 = Math.min(w, c + 24); }
+    if (y2 - y1 < 48) { const c = (y1 + y2) / 2; y1 = Math.max(0, c - 24); y2 = Math.min(h, c + 24); }
+    return { x1, y1, x2, y2 };
   }
 
   const pos = (e) => {
@@ -5207,19 +5247,35 @@ function attachHandwriting(input, mountAfter) {
     msg.textContent = '';
 
     try {
-      // JPEG 는 투명을 검정으로 바꾸므로 흰 배경을 먼저 깔아야 한다
+      // ── 글씨 부분만 잘라서 크게 보낸다 ──────────────────────
+      // 이게 판독 정확도에 제일 크게 작용한다.
+      // 캔버스 전체를 보내면 흰 여백이 대부분이라, AI가 이미지를 타일로 볼 때
+      // 글씨가 아주 작게 들어간다. 2√3 을 2 로 읽었던 원인이 이것이다.
+      const b = inkBounds();
+      const sw = b.x2 - b.x1, sh = b.y2 - b.y1;
+      const scale = Math.max(1, HW_OUT_MIN_H / sh);   // 작으면 키워서 보낸다
       const out = document.createElement('canvas');
-      out.width = canvas.width; out.height = canvas.height;
+      out.width  = Math.round(sw * scale);
+      out.height = Math.round(sh * scale);
       const octx = out.getContext('2d');
       octx.fillStyle = '#ffffff';
       octx.fillRect(0, 0, out.width, out.height);
-      octx.drawImage(canvas, 0, 0);
-      const b64 = out.toDataURL('image/jpeg', 0.9).split(',')[1];
+      octx.imageSmoothingQuality = 'high';
+      // 주의: drawImage 의 원본 좌표는 캔버스 "실제 픽셀" 기준이다.
+      //       획 좌표는 CSS 픽셀로 저장했으므로 dpr 을 곱해야 한다.
+      const dpr = window.devicePixelRatio || 1;
+      octx.drawImage(canvas, b.x1 * dpr, b.y1 * dpr, sw * dpr, sh * dpr, 0, 0, out.width, out.height);
+
+      // PNG 로 보낸다. JPEG 는 가는 선 둘레에 번짐을 만들어 판독을 방해한다.
+      // 선 그림이라 PNG 가 오히려 더 작다.
+      const b64 = out.toDataURL('image/png').split(',')[1];
+      console.log(`[손글씨] ${Math.round(sw)}×${Math.round(sh)} → ${out.width}×${out.height}, ` +
+        `${Math.round(b64.length * 0.75 / 1024)}KB`);
 
       const res = await aiFetch({
         contents: [{ parts: [
           { text: hwPrompt() },
-          { inline_data: { mime_type: 'image/jpeg', data: b64 } },
+          { inline_data: { mime_type: 'image/png', data: b64 } },
         ] }],
         generationConfig: {
           temperature: 0,
@@ -5231,12 +5287,16 @@ function attachHandwriting(input, mountAfter) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error?.message || `판독 실패 (${res.status})`);
 
-      const parts = data.candidates?.[0]?.content?.parts || [];
-      const read = parts.filter((p) => p.text && !p.thought).map((p) => p.text).join('')
-        .replace(/[`"'\n\r]/g, '').trim();
+      const cand = data.candidates?.[0];
+      const parts = cand?.content?.parts || [];
+      const raw = parts.filter((p) => p.text && !p.thought).map((p) => p.text).join('');
+      const read = hwNormalize(raw);
 
+      if (cand?.finishReason === 'MAX_TOKENS') {
+        console.warn('[손글씨] 출력이 토큰 한도로 잘렸습니다. HW_MAX_TOKENS 를 늘리세요.');
+      }
       if (!read || read === '?') {
-        msg.textContent = '글씨를 알아보지 못했어요. 더 크게 써보거나 직접 입력해 주세요.';
+        msg.textContent = '글씨를 알아보지 못했어요. 더 크고 또박또박 써보거나 직접 입력해 주세요.';
         return;
       }
       input.value = read;
