@@ -69,7 +69,56 @@ a:hover { text-decoration: underline; }
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(12px);
 }
+/* ===== AI 문제 vs 수능 기출 요약 칸 (폰 대응) =====
+   두 칸을 가로로 나란히 두면 폰에서 각 칸이 140px 남짓이라
+   "9문제 · 정답률 / 11%" 처럼 문장이 중간에서 잘린다.
+   폰에서는 위아래로 쌓는다.
+   ※ 이 규칙들의 원본은 index.html 안쪽 <style> 에 있고 그게 더 나중에 실린다.
+     그래서 선택자를 한 단계 더 써서(0-2-0) 우선순위로 이긴다. */
+@media (max-width: 480px) {
+  /* !important 를 쓰는 이유: 원본 규칙이 index.html 안쪽 <style> 에 있고
+     그 블록이 이 파일보다 나중에 실린다. 선택자 특이성이 같으면 나중 것이 이기므로,
+     index.html 을 건드리지 않고 덮으려면 이 방법뿐이다. */
+  .compare-summary-row {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+  .compare-badge {
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 10px 14px !important;
+  }
+  .compare-badge-info span {
+    font-size: 0.8rem !important;
+    white-space: nowrap !important;   /* 숫자와 '정답률' 이 갈라지지 않게 */
+  }
+}
+
 .header-logo { font-size: 1.4rem; font-weight: 900; letter-spacing: -1px; flex-shrink: 0; color: var(--text); }
+
+/* 로고 = 홈 버튼.
+   script.js 가 role="button" 을 붙였을 때만 누를 수 있게 보이도록 한다.
+   자바스크립트가 못 붙은 상황에서 눌릴 것처럼 보이면 더 나쁘기 때문이다. */
+.header-logo[role="button"] {
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  padding: 2px 6px;
+  margin-left: -6px;              /* 패딩만큼 당겨 원래 위치 유지 */
+  border-radius: var(--radius-sm, 8px);
+  transition: background-color 0.15s ease, transform 0.08s ease;
+}
+.header-logo[role="button"]:hover  { background: rgba(74,144,226,0.08); }
+.header-logo[role="button"]:active { transform: scale(0.97); }
+.header-logo[role="button"]:focus-visible {
+  outline: 2px solid var(--accent, #4A90E2);
+  outline-offset: 2px;
+}
+/* 터치 기기에선 hover 가 누른 뒤에도 남아 있어서, 홈이 아닌데 눌린 것처럼 보인다 */
+@media (hover: none) {
+  .header-logo[role="button"]:hover { background: transparent; }
+}
+
 .header-nav { display: flex; gap: 4px; flex: 1; }
 .nav-btn { background: none; border: none; cursor: pointer; color: var(--text2); font-size: 0.85rem; font-weight: 600; padding: 8px 16px; border-radius: var(--radius-sm); transition: all 0.2s; font-family: 'Pretendard', sans-serif; }
 .nav-btn:hover { color: var(--accent); background: rgba(74,144,226,0.08); }
@@ -141,6 +190,7 @@ a:hover { text-decoration: underline; }
 .step p { color: var(--text2); font-size: 0.8rem; line-height: 1.5; }
 .step-arrow { font-size: 1.5rem; color: var(--text3); padding: 0 8px; flex-shrink: 0; }
 
+
 /* ===== PAGE HEADER ===== */
 .page-header { padding: 48px 64px 32px; }
 .page-header h2 { font-size: 2rem; font-weight: 800; margin-bottom: 8px; color: var(--text); }
@@ -159,12 +209,15 @@ a:hover { text-decoration: underline; }
 .api-key-section { display: flex; flex-direction: column; gap: 8px; }
 .input-label { font-weight: 700; font-size: 0.85rem; color: var(--text2); }
 .input-row { display: flex; gap: 8px; }
-.text-input { flex: 1; background: var(--bg3); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; color: var(--text); font-family: 'Pretendard', sans-serif; font-size: 0.9rem; transition: all 0.2s; }
+.text-input { flex: 1; background: var(--bg3); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; color: var(--text); font-family: 'Pretendard', sans-serif; font-size: 0.9rem; transition: all 0.2s; -moz-appearance: textfield; appearance: textfield; }
+.text-input::-webkit-outer-spin-button, .text-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .text-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
 .input-hint { font-size: 0.78rem; color: var(--text3); }
 .select-input { width: 100%; background: var(--bg3); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; color: var(--text); font-family: 'Pretendard', sans-serif; font-size: 0.9rem; cursor: pointer; }
 .select-input:focus { outline: none; border-color: var(--accent); }
 .result-box { background: var(--bg3); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 20px; margin-top: 8px; }
+.multi-result-box { margin-top: 18px; padding: 18px; background: var(--bg2); border: 1.5px solid var(--border); border-radius: var(--radius-sm); border-top: 3px solid var(--accent); }
+.multi-result-box::before { content: '📝 채점 결과'; display: block; font-weight: 800; font-size: 0.85rem; color: var(--accent); margin-bottom: 12px; }
 .result-box h3 { font-weight: 700; margin-bottom: 12px; color: var(--text); }
 
 /* ===== TRAINING ===== */
@@ -180,10 +233,77 @@ a:hover { text-decoration: underline; }
 .goal-empty { text-align: center; padding: 40px; }
 .goal-empty p { color: var(--text2); margin-bottom: 20px; line-height: 1.6; }
 .solve-desc { color: var(--text2); margin-bottom: 20px; }
+
+/* ===== 풀이 연습 업로드 드롭존 ===== */
+.upload-area {
+  background: linear-gradient(180deg, var(--bg2), var(--card));
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 44px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .2s, background .2s, transform .2s, box-shadow .2s;
+}
+.upload-area:hover {
+  border-color: var(--accent);
+  background: linear-gradient(180deg, rgba(74,144,226,0.06), var(--card));
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card);
+}
+.upload-area.drag-over {
+  border-color: var(--accent);
+  border-style: solid;
+  background: rgba(74,144,226,0.10);
+  transform: scale(1.01);
+  box-shadow: 0 0 0 4px var(--accent-glow);
+}
+.upload-area .upload-icon {
+  width: 76px; height: 76px;
+  margin: 0 auto 18px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2.1rem;
+  background: linear-gradient(135deg, rgba(74,144,226,0.16), rgba(107,126,201,0.16));
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  transition: transform .2s;
+}
+.upload-area:hover .upload-icon { transform: scale(1.06) rotate(-3deg); }
+.upload-text { font-weight: 800; font-size: 1.05rem; color: var(--text); margin-bottom: 6px; letter-spacing: -0.3px; }
+.upload-subtext { font-size: 0.82rem; color: var(--text3); line-height: 1.5; }
+.upload-pill {
+  display: inline-block; margin-top: 18px;
+  padding: 10px 22px; border-radius: 99px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: #fff; font-weight: 700; font-size: 0.88rem;
+  box-shadow: 0 4px 14px rgba(74,144,226,0.28);
+  transition: transform .2s, box-shadow .2s;
+}
+.upload-area:hover .upload-pill { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(74,144,226,0.35); }
 .solve-textarea { width: 100%; background: var(--bg3); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 14px; color: var(--text); font-family: 'Pretendard', sans-serif; font-size: 0.9rem; resize: vertical; min-height: 140px; margin-bottom: 12px; transition: all 0.2s; }
 .solve-textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
 .problem-box { background: rgba(74,144,226,0.06); border-left: 4px solid var(--accent); border-radius: var(--radius-sm); padding: 20px; margin: 20px 0; line-height: 1.8; color: var(--text); }
 .type-select-row { display: flex; gap: 12px; margin-bottom: 20px; }
+.type-select-col { display: flex; flex-direction: column; gap: 18px; margin-bottom: 20px; }
+.type-btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ===== 단원 선택 칩 피커 ===== */
+.type-picker { display: flex; flex-direction: column; gap: 16px; }
+.tp-group { }
+.tp-group-label { font-weight: 800; font-size: 0.8rem; color: var(--text2); margin-bottom: 10px; letter-spacing: -0.2px; }
+.tp-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.tp-chip {
+  padding: 9px 16px; border-radius: 99px;
+  border: 1.5px solid var(--border); background: var(--card);
+  color: var(--text2); font-weight: 600; font-size: 0.88rem;
+  font-family: 'Pretendard', sans-serif; cursor: pointer;
+  transition: all .15s;
+}
+.tp-chip:hover { border-color: var(--accent); color: var(--accent); background: rgba(74,144,226,0.05); transform: translateY(-1px); }
+.tp-chip.selected {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border-color: var(--accent); color: #fff;
+  box-shadow: 0 4px 12px var(--accent-glow);
+}
 .hint-btn { margin-left: 8px; }
 .weak-types { margin: 16px 0; }
 .empty-hint { color: var(--text3); font-style: italic; font-size: 0.85rem; }
@@ -315,7 +435,13 @@ canvas { width: 100% !important; }
 .feedback-section-body { color: var(--text); font-size: 0.88rem; line-height: 1.8; padding-left: 4px; }
 
 /* ===== 분석 결과 카드 ===== */
-.analysis-cards { display: flex; flex-direction: column; gap: 12px; }
+/* ===== 분석 결과: 좌우 칸을 가로질러 전체 너비 ===== */
+.analyze-wide { grid-column: 1 / -1; }
+
+/* 카드가 한 줄씩 세로로 늘어지지 않도록 2단으로 묶는다.
+   카드마다 높이가 달라서 grid 대신 multi-column 을 써야 빈칸 없이 채워진다. */
+.analysis-cards { columns: 2; column-gap: 14px; }
+.analysis-card { break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid; margin-bottom: 14px; display: inline-block; width: 100%; }
 .analysis-card { background: var(--bg3); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 16px 20px; }
 .analysis-card-title { font-weight: 700; font-size: 0.88rem; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
 .analysis-card-body { color: var(--text); font-size: 0.88rem; line-height: 1.9; }
@@ -366,6 +492,16 @@ canvas { width: 100% !important; }
 .wrong-note-type { background: rgba(74,144,226,0.1); color: var(--accent); font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; }
 .wrong-note-date { color: var(--text3); font-size: 0.75rem; }
 .wrong-retried-badge { color: var(--green); font-size: 0.75rem; font-weight: 700; }
+/* 같은 문제를 여러 번 틀렸을 때. 횟수가 많을수록 지금 가장 약한 문제라는 뜻이라
+   눈에 띄어야 한다. 1번일 때는 아예 안 보여준다(script.js 에서 처리). */
+.wrong-count-badge {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 99px;
+}
 .wrong-note-problem { font-size: 0.85rem; color: var(--text); margin-bottom: 8px; line-height: 1.5; }
 .wrong-note-ans { font-size: 0.82rem; margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
 .btn-retry { background: none; border: 1.5px solid var(--border); color: var(--text2); border-radius: 8px; padding: 5px 12px; font-size: 0.8rem; cursor: pointer; font-family: 'Pretendard', sans-serif; transition: all 0.2s; }
@@ -380,7 +516,7 @@ canvas { width: 100% !important; }
 .progress-unit-name { font-size: 0.82rem; color: var(--text2); width: 130px; flex-shrink: 0; }
 .progress-unit-bar { flex: 1; height: 8px; background: var(--border); border-radius: 99px; overflow: hidden; }
 .progress-unit-fill { height: 100%; border-radius: 99px; transition: width 0.5s; }
-.progress-unit-pct { font-size: 0.75rem; color: var(--text3); width: 30px; text-align: right; }
+.progress-unit-pct { font-size: 0.75rem; color: var(--text3); width: 116px; text-align: right; flex-shrink: 0; white-space: nowrap; }
 
 /* ===== 성적 예측 ===== */
 .prediction-box { min-height: 80px; }
@@ -443,10 +579,240 @@ canvas { width: 100% !important; }
   .step-arrow { transform: rotate(90deg); }
   .page-header { padding: 32px 24px 20px; }
   .analyze-layout { grid-template-columns: 1fr; padding: 0 24px 40px; }
+  .analysis-cards { columns: 1; }
   .training-tabs { padding: 0 24px 16px; }
   .tab-content { padding: 0 24px 40px; }
   .stats-grid { grid-template-columns: 1fr; padding: 0 24px 40px; }
   .stats-card.span2 { grid-column: span 1; }
-  .header { padding: 0 16px; }
-  .header-nav { display: none; }
+  /* backdrop-filter 가 걸린 조상 안에서는 position:fixed 가 화면이 아니라
+     그 조상을 기준으로 잡힌다. 아래 탭바를 화면 바닥에 붙이려면 꺼야 한다. */
+  .header { padding: 0 16px; backdrop-filter: none; }
+
+  /* [배포] 폰에서 탭을 숨기면 페이지 이동이 아예 막힌다.
+     숨기지 말고 화면 아래 탭바로 내린다. */
+  .header-nav {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 200;
+    display: flex; gap: 2px; flex: none;
+    background: rgba(255, 255, 255, 0.97);
+    border-top: 1px solid var(--border);
+    backdrop-filter: blur(12px);
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+  }
+  .header-nav .nav-btn {
+    flex: 1 1 0; min-width: 0;
+    font-size: 0.72rem; font-weight: 700;
+    padding: 9px 2px; border-radius: 10px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .header-nav .nav-btn.active { background: rgba(74, 144, 226, 0.14); }
+
+  /* 탭바가 본문 끝을 가리지 않도록 아래 여백을 준다 */
+  body { padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
 }
+
+/* ===== [v9] 문제 카드 =====
+   한 화면에 여러 문제를 놓으면(레벨 테스트) 경계가 없어서 어디서 끊기는지 안 보인다.
+   카드마다 테두리를 줘서 문제 단위를 눈으로 구분되게 한다. */
+.multi-problem-card {
+  background: var(--card, #fff);
+  border: 1.5px solid var(--border, #e3e6ea);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+.multi-problem-card + .multi-problem-card { margin-top: 0; }
+.multi-problem-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border, #e3e6ea);
+}
+.multi-problem-num { font-weight: 700; font-size: 0.98rem; }
+.multi-problem-body { line-height: 1.65; }
+
+@media (max-width: 900px) {
+  .multi-problem-card { padding: 14px; border-radius: 12px; }
+}
+
+/* ===== 긴 수식이 화면 밖으로 잘리는 문제 =====
+   원인: body 에 overflow-x:hidden 이 걸려 있어 페이지가 가로로 안 밀리는데,
+        아래의 overflow:visible 때문에 긴 수식은 박스 밖으로 삐져나간다.
+        그래서 폰에서 화면 오른쪽 끝에서 그냥 잘려 보인다.
+   해결: 페이지가 아니라 "수식 하나"만 가로로 스크롤되게 한다.
+        MathJax 는 수식마다 mjx-container 로 감싸므로 거기에만 건다. */
+   주의: mjx-container 는 브라우저가 모르는 태그라 기본이 inline 이고,
+        inline 요소에는 overflow-x 가 적용되지 않는다. display 를 직접 지정해야 한다. */
+mjx-container {
+  max-width: 100%;
+}
+mjx-container[display="true"] {
+  display: block;                      /* ← 이게 없으면 아래 overflow 가 무시된다 */
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 6px;                 /* 스크롤바가 수식 아랫부분을 가리지 않게 */
+  -webkit-overflow-scrolling: touch;   /* iOS 에서 부드럽게 */
+}
+/* 인라인 수식($...$)도 같이 잡아야 한다.
+   AI가 내는 풀이는 전부 $...$ 라서 긴 계산식이 글 중간에 인라인으로 들어오고,
+   인라인 수식은 줄바꿈이 안 돼 화면 밖으로 밀려난다. 실제로 이것 때문에 잘렸다. */
+mjx-container:not([display="true"]) {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  vertical-align: -0.35em;             /* inline-block + overflow 는 기준선이 바닥으로 가서 보정 */
+  -webkit-overflow-scrolling: touch;
+  /* ★ 스크롤바 자체를 숨긴다 (스크롤 기능은 그대로 남는다)
+     MathJax 는 수식 폭을 24.44px 처럼 소수점으로 잡는다. 윈도우 크롬은 이걸
+     clientWidth 24 로 반올림하면서 "0.44px 넘쳤다"고 보고 스크롤바를 그린다.
+     그 결과 보기 ①~⑤ 의 '0', '-2' 같은 짧은 수식 아래에까지 ◀▶ 화살표가 붙었다.
+     맥·아이폰은 겹쳐 뜨는 스크롤바라 아무 문제가 없어서 눈에 안 띄었다.
+     숨겨도 손가락으로 밀기·Shift+휠은 그대로 되므로 긴 수식은 여전히 볼 수 있다. */
+  scrollbar-width: none;               /* 파이어폭스 */
+  -ms-overflow-style: none;            /* 구형 엣지 */
+}
+mjx-container:not([display="true"])::-webkit-scrollbar {
+  display: none;                       /* 크롬·사파리 */
+}
+/* 긴 토막이 단어 단위로 안 끊겨 넘치는 경우까지 막는다 */
+.feedback-section-body, .result-box, .multi-result-box, .multi-problem-body {
+  overflow-wrap: anywhere;
+}
+
+/* ===== 풀이/문제 박스: 높이 제한 없이 전체 펼침 (스크롤 잘림 방지) ===== */
+.multi-result-box, .result-box, .feedback-section-body, .feedback-wrap { max-height: none !important; overflow: visible !important; }
+.problem-list-wrap, .multi-problem-item, .multi-problem-card, .multi-problem-body, .multi-answer-area { max-height: none; overflow: visible; }
+/* ===== 손글씨 답 입력 =====
+   주관식 입력칸 아래에 붙는다. 객관식에는 아예 만들어지지 않는다. */
+.hw-box { margin-top: 8px; }
+.hw-tabs {
+  display: inline-flex;
+  gap: 4px;
+  background: var(--bg3, #f2f5fa);
+  border: 1px solid var(--border, #e3e6ea);
+  border-radius: 10px;
+  padding: 3px;
+}
+.hw-tab {
+  border: none;
+  background: transparent;
+  color: var(--text2, #5a6477);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 7px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.hw-tab.is-on {
+  background: #fff;
+  color: var(--accent, #4A90E2);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.hw-pad { margin-top: 8px; }
+.hw-canvas {
+  display: block;
+  width: 100%;
+  height: 170px;
+  background: #fff;
+  border: 1.5px dashed var(--border, #cbd5e1);
+  border-radius: 12px;
+  /* 그리는 동안 화면이 같이 스크롤되지 않게 한다. 이게 없으면 폰에서 글씨를 못 쓴다. */
+  touch-action: none;
+  cursor: crosshair;
+}
+.hw-actions { display: flex; gap: 8px; margin-top: 8px; }
+.hw-btn {
+  flex: 1 1 0;
+  border: 1px solid var(--border, #e3e6ea);
+  background: #fff;
+  color: var(--text2, #5a6477);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 10px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.hw-btn:disabled { opacity: 0.55; cursor: default; }
+.hw-read {
+  background: var(--accent, #4A90E2);
+  border-color: var(--accent, #4A90E2);
+  color: #fff;
+  flex: 1.4 1 0;
+}
+.hw-msg { font-size: 0.82rem; color: var(--red, #d14343); margin-top: 8px; min-height: 18px; line-height: 1.5; }
+.hw-msg .hw-ok { color: var(--green, #34C759); }
+
+@media (max-width: 900px) {
+  .hw-canvas { height: 150px; }
+}
+
+/* ===== 문제 신고 버튼 ===== */
+.rp-wrap { margin-top: 12px; }
+.rp-open {
+  border: 1px solid var(--border, #e3e6ea);
+  background: transparent;
+  color: var(--text3, #8a92a6);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.rp-open:hover:not(:disabled) { color: var(--text2, #5a6477); border-color: var(--text3, #8a92a6); }
+.rp-open:disabled { color: var(--green, #34C759); border-color: rgba(52,199,89,0.35); cursor: default; }
+.rp-panel {
+  margin-top: 10px;
+  background: var(--bg3, #f6f8fc);
+  border: 1px solid var(--border, #e3e6ea);
+  border-radius: 12px;
+  padding: 14px;
+}
+.rp-title { font-size: 0.88rem; font-weight: 700; margin-bottom: 10px; }
+.rp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.rp-chip {
+  border: 1px solid var(--border, #e3e6ea);
+  background: #fff;
+  color: var(--text2, #5a6477);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 7px 11px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.rp-chip.is-on {
+  background: var(--accent, #4A90E2);
+  border-color: var(--accent, #4A90E2);
+  color: #fff;
+}
+.rp-memo {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border, #e3e6ea);
+  border-radius: 10px;
+  padding: 10px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  resize: vertical;
+}
+.rp-actions { display: flex; gap: 8px; margin-top: 10px; }
+.rp-cancel, .rp-send {
+  flex: 1 1 0;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 10px;
+  cursor: pointer;
+}
+.rp-cancel { border: 1px solid var(--border, #e3e6ea); background: #fff; color: var(--text2, #5a6477); }
+.rp-send { border: none; background: var(--accent, #4A90E2); color: #fff; }
+.rp-send:disabled { opacity: 0.6; cursor: default; }
+.rp-msg { font-size: 0.8rem; color: var(--red, #d14343); margin-top: 8px; min-height: 16px; }
