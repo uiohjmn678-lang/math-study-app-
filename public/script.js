@@ -6003,3 +6003,303 @@ function resetReport(container) {
   container?.querySelector('.rp-panel')?.classList.add('hidden');
   container?.querySelectorAll('.rp-chip').forEach((c) => c.classList.remove('is-on'));
 }
+
+// ============================================================
+//  AI 튜터 채팅
+//
+//  무엇인가
+//    학생이 수학을 물어보면 대화로 답한다. 기존 "문제별 질문하기"는
+//    한 번 묻고 한 번 답하면 끝이지만, 여기서는 앞 대화를 같이 보내기
+//    때문에 "그럼 이건 왜 그래요?" 처럼 이어서 물을 수 있다.
+//
+//  왜 이렇게 만들었나
+//    1) 수학만 답한다. 학생들에게 열어 주는 창구라 범위를 막아야 한다.
+//    2) 답을 바로 주지 않는다. 한 단계 되물어 보고, 계속 모르겠다고 하면
+//       그때 알려 준다. 답만 받아 가면 튜터가 아니라 답지다.
+//    3) 학생 등급에 맞춰 설명 수준을 바꾼다. 5등급과 2등급에게 같은
+//       설명을 하면 둘 다 못 알아듣는다.
+//    4) "얼마나 공부하면 등급이 오르냐"에는 기간을 말하지 않는다.
+//       우리에게는 학습량과 등급 상승의 관계를 보여 주는 데이터가 없다.
+//       없는 근거로 "3개월이면 됩니다" 라고 하면 그건 지어낸 숫자다.
+//       대신 실제 기록을 근거로 "무엇을" 해야 하는지 답한다.
+//
+//  설치
+//    이 파일 내용을 public/script.js 맨 아래에 그대로 붙여 넣는다.
+//    그리고 index.html 의 "준비중" 카드를 아래로 바꾼다.
+//
+//      <div class="feature-card" onclick="openTutorChat()">
+//        <div class="feature-icon">🤖</div>
+//        <h3>AI 튜터 채팅</h3>
+//        <p>수학 개념이 헷갈릴 때 언제든지 AI 튜터에게 질문할 수 있어요.</p>
+//        <span class="feature-tag">Gemini AI</span>
+//      </div>
+// ============================================================
+
+// 주고받은 대화. {role:'user'|'model', text} 의 배열.
+let tutorHistory = [];
+
+// 몇 번의 주고받기까지 기억할지. 넘으면 오래된 것부터 버린다.
+// 대화가 길어질수록 앞 내용을 매번 다시 보내느라 비용이 올라가고,
+// 학생이 주제를 바꾸면 앞 내용은 어차피 쓸모가 없다.
+const TUTOR_MAX_TURNS = 10;
+
+// ---- 학생 기록 요약 ----
+// state 와 오답 노트에서 사실만 뽑는다. 해석은 AI 가 한다.
+function buildTutorContext() {
+  const lines = [];
+
+  lines.push(`학생 이름: ${state.studentName || '학생'}`);
+  lines.push(`현재 등급: ${state.currentGrade !== '-' ? state.currentGrade + '등급' : '아직 모름'}`);
+
+  const total = state.totalProblems || 0;
+  const correct = state.correctProblems || 0;
+  if (total > 0) {
+    lines.push(`지금까지 푼 문제: ${total}개 중 ${correct}개 정답 (정답률 ${Math.round(correct / total * 100)}%)`);
+  } else {
+    lines.push('지금까지 푼 문제: 아직 없음');
+  }
+
+  // 단원별 정답률 — 날짜별로 쌓인 기록을 단원 단위로 합친다
+  const units = [];
+  Object.entries(state.unitScoreHistory || {}).forEach(([unit, arr]) => {
+    let c = 0, t = 0;
+    (arr || []).forEach(e => { c += (e.correct || 0); t += (e.total || 0); });
+    if (t > 0) units.push({ unit, c, t, rate: c / t });
+  });
+  units.sort((a, b) => a.rate - b.rate);
+
+  if (units.length) {
+    lines.push('');
+    lines.push('단원별 기록 (정답률 낮은 순):');
+    units.forEach(u => {
+      lines.push(`  - ${u.unit}: ${u.t}문제 중 ${u.c}개 정답 (${Math.round(u.rate * 100)}%)`);
+    });
+  } else {
+    lines.push('단원별 기록: 아직 없음');
+  }
+
+  if ((state.weakTypes || []).length) {
+    lines.push('');
+    lines.push(`성적 분석에서 약점으로 잡힌 단원: ${state.weakTypes.join(', ')}`);
+  }
+
+  // 반복해서 틀린 문제 — 어디가 진짜 약점인지 가장 잘 드러난다
+  const notes = lsJSON('wrong_notes', []);
+  const repeat = notes
+    .filter(n => (n.wrongCount || 1) >= 2)
+    .sort((a, b) => (b.wrongCount || 1) - (a.wrongCount || 1))
+    .slice(0, 5);
+  if (repeat.length) {
+    lines.push('');
+    lines.push('두 번 이상 틀린 문제:');
+    repeat.forEach(n => {
+      lines.push(`  - [${n.type || '기타'}] ${n.wrongCount}번 틀림`);
+    });
+  }
+  if (notes.length) {
+    lines.push(`오답 노트에 쌓인 문제: 총 ${notes.length}개`);
+  }
+
+  return lines.join('\n');
+}
+
+// ---- 튜터에게 주는 역할 지시 ----
+function tutorPreamble() {
+  return `너는 수능 수학 튜터야. 아래 규칙을 반드시 지켜.
+
+[범위]
+- 수능 수학과 관련된 것만 답한다. 개념 설명, 문제 풀이, 공부 방향, 학생 자신의 학습 기록 해석까지가 범위다.
+- 수학과 관계없는 질문(잡담, 다른 과목, 연애 상담, 코딩 질문 등)에는 "수학 질문만 도와드릴 수 있어요" 라고 짧게 답하고 수학 이야기로 돌린다. 예외 없다.
+
+[가르치는 방식]
+- 답을 바로 주지 않는다. 먼저 한 단계를 되물어서 학생이 스스로 짚게 한다.
+- 학생이 두 번 이상 모르겠다고 하거나 바로 알려달라고 하면 그때는 전부 설명한다. 끝까지 버티지 않는다.
+- 학생 등급에 맞춰 설명 수준을 바꾼다. 4~9등급이면 용어부터 풀어서 아주 쉽게, 1~3등급이면 핵심만 간결하게.
+- 한 번에 3~6문장으로 짧게 답한다. 길게 쏟아내지 않는다.
+
+[등급 상승 질문]
+- "얼마나 공부하면 등급이 오르나요" 같은 질문에 기간이나 시간, 문제 수를 예측해서 말하지 마라. 그 예측을 뒷받침할 데이터가 우리에게 없다. 지어낸 숫자는 학생에게 해롭다.
+- 수능 등급은 상대평가라서 등급컷이 매년 달라진다는 점도 솔직히 말한다.
+- 대신 아래 [학생 기록]을 근거로 "무엇을" 해야 하는지 구체적으로 답한다. 어느 단원이 약한지, 어느 배점에서 점수가 새는지, 그래서 다음에 무엇부터 풀어야 하는지.
+- 기록이 비어 있으면 아직 데이터가 부족하다고 말하고, 문제를 몇 개 풀어 보라고 권한다. 없는 기록을 지어내지 마라.
+
+[형식]
+- 마크다운 기호(#, **, *, -)를 쓰지 마라.
+- 수식은 반드시 $...$ 사이에 LaTeX로 쓴다. 예: $a_n = a_1 r^{n-1}$
+- 말투는 "~예요", "~해요" 체로 친근하게.
+
+[학생 기록]
+${buildTutorContext()}`;
+}
+
+// ---- 화면 ----
+function tutorInjectStyle() {
+  if (document.getElementById('tutorChatStyle')) return;
+  const st = document.createElement('style');
+  st.id = 'tutorChatStyle';
+  st.textContent = `
+.tutor-modal{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);padding:16px}
+.tutor-box{background:#fff;border-radius:18px;width:100%;max-width:560px;height:min(680px,88vh);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 12px 40px rgba(74,144,226,.22)}
+.tutor-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid #eef1f6;flex:0 0 auto}
+.tutor-head h3{margin:0;font-size:1.05rem;font-weight:800;color:#1a2340}
+.tutor-head p{margin:2px 0 0;font-size:.78rem;color:#8a93a6}
+.tutor-x{background:none;border:none;font-size:1.3rem;line-height:1;color:#8a93a6;cursor:pointer;padding:4px 8px}
+.tutor-log{flex:1 1 auto;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px;background:#f7f9fc}
+.tutor-msg{max-width:84%;padding:11px 14px;border-radius:14px;font-size:.92rem;line-height:1.75;white-space:pre-wrap;word-break:break-word}
+.tutor-msg.me{align-self:flex-end;background:linear-gradient(135deg,#4A90E2,#6B7EC9);color:#fff;border-bottom-right-radius:4px}
+.tutor-msg.ai{align-self:flex-start;background:#fff;color:#1a2340;border:1px solid #e7ecf4;border-bottom-left-radius:4px}
+.tutor-msg.err{align-self:flex-start;background:#fff2f2;color:#c0392b;border:1px solid #f3d2d2}
+.tutor-chips{display:flex;flex-wrap:wrap;gap:8px;padding:0 18px 12px;background:#f7f9fc;flex:0 0 auto}
+.tutor-chip{background:#fff;border:1px solid #d9e2f0;color:#4A90E2;border-radius:20px;padding:7px 13px;font-size:.8rem;font-weight:600;cursor:pointer}
+.tutor-chip:hover{background:#eef4fd}
+.tutor-foot{display:flex;gap:8px;padding:12px 14px;border-top:1px solid #eef1f6;flex:0 0 auto;align-items:flex-end}
+.tutor-foot textarea{flex:1;resize:none;border:1px solid #d9e2f0;border-radius:12px;padding:11px 13px;font-size:.92rem;font-family:inherit;line-height:1.5;max-height:110px;outline:none}
+.tutor-foot textarea:focus{border-color:#4A90E2}
+.tutor-send{background:linear-gradient(135deg,#4A90E2,#6B7EC9);color:#fff;border:none;border-radius:12px;padding:11px 18px;font-size:.92rem;font-weight:700;cursor:pointer;white-space:nowrap}
+.tutor-send:disabled{opacity:.5;cursor:default}
+@media (max-width:480px){.tutor-box{height:94vh;max-width:100%}.tutor-msg{max-width:90%}}
+`;
+  document.head.appendChild(st);
+}
+
+function tutorAppend(role, text) {
+  const log = document.getElementById('tutorLog');
+  if (!log) return null;
+  const div = document.createElement('div');
+  div.className = 'tutor-msg ' + (role === 'user' ? 'me' : role === 'err' ? 'err' : 'ai');
+  div.innerHTML = escapeHtml(text);
+  log.appendChild(div);
+  renderMath(div);
+  log.scrollTop = log.scrollHeight;
+  return div;
+}
+
+window.openTutorChat = function () {
+  tutorInjectStyle();
+  const old = document.getElementById('tutorModal');
+  if (old) old.remove();
+
+  const grade = state.currentGrade !== '-' ? `${state.currentGrade}등급` : '등급 미입력';
+  const modal = document.createElement('div');
+  modal.id = 'tutorModal';
+  modal.className = 'tutor-modal';
+  modal.innerHTML = `
+    <div class="tutor-box">
+      <div class="tutor-head">
+        <div>
+          <h3>🤖 AI 튜터</h3>
+          <p>${escapeHtml(state.studentName || '학생')} · ${escapeHtml(grade)} · 수학 질문만 받아요</p>
+        </div>
+        <button class="tutor-x" onclick="closeTutorChat()">✕</button>
+      </div>
+      <div class="tutor-log" id="tutorLog"></div>
+      <div class="tutor-chips" id="tutorChips">
+        <button class="tutor-chip" onclick="tutorQuick(this)">내 약점 단원이 뭐야?</button>
+        <button class="tutor-chip" onclick="tutorQuick(this)">등급 올리려면 뭐부터 해야 해?</button>
+        <button class="tutor-chip" onclick="tutorQuick(this)">오늘 뭘 풀면 좋을까?</button>
+      </div>
+      <div class="tutor-foot">
+        <textarea id="tutorInput" rows="1" placeholder="수학 질문을 입력하세요"></textarea>
+        <button class="tutor-send" id="tutorSend" onclick="sendTutorMessage()">보내기</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+
+  modal.addEventListener('click', e => { if (e.target === modal) closeTutorChat(); });
+
+  const ta = document.getElementById('tutorInput');
+  ta.addEventListener('input', () => {
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 110) + 'px';
+  });
+  ta.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendTutorMessage(); }
+  });
+
+  // 이전 대화가 있으면 되살리고, 없으면 인사부터
+  if (tutorHistory.length) {
+    tutorHistory.forEach(m => tutorAppend(m.role === 'user' ? 'user' : 'ai', m.text));
+  } else {
+    tutorAppend('ai', `안녕하세요 ${state.studentName || '학생'}님! 수학에서 막히는 거 있으면 물어보세요.\n개념이 헷갈려도 되고, 문제 풀다 막힌 데를 말해도 돼요.`);
+  }
+  setTimeout(() => ta.focus(), 50);
+};
+
+window.closeTutorChat = function () {
+  const m = document.getElementById('tutorModal');
+  if (m) m.remove();
+};
+
+window.tutorQuick = function (btn) {
+  const ta = document.getElementById('tutorInput');
+  if (!ta) return;
+  ta.value = btn.textContent;
+  sendTutorMessage();
+};
+
+window.sendTutorMessage = async function () {
+  const ta = document.getElementById('tutorInput');
+  const btn = document.getElementById('tutorSend');
+  if (!ta || !btn) return;
+
+  const msg = ta.value.trim();
+  if (!msg) return;
+
+  ta.value = '';
+  ta.style.height = 'auto';
+  btn.disabled = true;
+
+  const chips = document.getElementById('tutorChips');
+  if (chips) chips.remove();           // 한 번 보내면 추천 질문은 치운다
+
+  tutorAppend('user', msg);
+  tutorHistory.push({ role: 'user', text: msg });
+
+  const thinking = tutorAppend('ai', '…');
+
+  try {
+    // 오래된 대화는 버린다 (비용과 맥락 양쪽을 위해)
+    if (tutorHistory.length > TUTOR_MAX_TURNS * 2) {
+      tutorHistory = tutorHistory.slice(-TUTOR_MAX_TURNS * 2);
+    }
+
+    // 역할 지시를 첫 주고받기로 깔고, 그 뒤에 실제 대화를 붙인다.
+    // (앱의 다른 호출들과 같은 contents 형식이라 서버 함수를 그대로 탄다)
+    const contents = [
+      { role: 'user',  parts: [{ text: tutorPreamble() }] },
+      { role: 'model', parts: [{ text: '네, 알겠습니다. 수능 수학만, 짧고 쉽게, 답을 바로 주지 않고 도와드릴게요.' }] },
+      ...tutorHistory.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
+    ];
+
+    const res = await aiFetch({
+      contents,
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 3000,
+        thinkingConfig: { thinkingBudget: 1200 },
+      },
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || `AI 호출 실패 (${res.status})`);
+
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    let answer = parts.filter(p => p.text && !p.thought).map(p => p.text).join('').trim();
+    if (!answer) answer = '답을 만들지 못했어요. 질문을 조금 더 구체적으로 써 주시겠어요?';
+
+    // 마크다운 기호가 섞여 나오면 지운다 (프롬프트로 막았지만 가끔 샌다)
+    answer = answer.replace(/#{1,6}\s*/g, '').replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1');
+
+    thinking.innerHTML = escapeHtml(answer);
+    renderMath(thinking);
+    tutorHistory.push({ role: 'model', text: answer });
+  } catch (e) {
+    thinking.className = 'tutor-msg err';
+    thinking.textContent = `답을 못 받았어요: ${e.message}`;
+    tutorHistory.pop();                // 실패한 질문은 기록에서 뺀다
+  } finally {
+    btn.disabled = false;
+    const log = document.getElementById('tutorLog');
+    if (log) log.scrollTop = log.scrollHeight;
+    ta.focus();
+  }
+};
