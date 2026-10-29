@@ -642,7 +642,7 @@ canvas { width: 100% !important; }
         아래의 overflow:visible 때문에 긴 수식은 박스 밖으로 삐져나간다.
         그래서 폰에서 화면 오른쪽 끝에서 그냥 잘려 보인다.
    해결: 페이지가 아니라 "수식 하나"만 가로로 스크롤되게 한다.
-        MathJax 는 수식마다 mjx-container 로 감싸므로 거기에만 건다. */
+        MathJax 는 수식마다 mjx-container 로 감싸므로 거기에만 건다.
    주의: mjx-container 는 브라우저가 모르는 태그라 기본이 inline 이고,
         inline 요소에는 overflow-x 가 적용되지 않는다. display 를 직접 지정해야 한다. */
 mjx-container {
