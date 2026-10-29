@@ -3244,8 +3244,8 @@ async function doCheckAnswer(card, section) {
          </button>` : '';
     // ⭐ 설명 생성이 실패해도 판정은 코드가 이미 알고 있으니 먼저 보여주고 기록한다
     const verdictHtml = isCorrect
-      ? `<div class="feedback-verdict correct">✅ 정답! <span style="font-size:0.9rem;opacity:0.85">(${correctAnswer})</span></div>`
-      : `<div class="feedback-verdict wrong">❌ 오답 <span style="font-size:0.9rem;opacity:0.85">— 정답: ${correctAnswer}</span></div>`;
+      ? `<div class="feedback-verdict correct">✅ 정답! <span style="font-size:0.9rem;opacifont-size:1.5rem;font-weight:800ty:0.85">(${escapeHtml(String(correctAnswer||''))})</span></div>`
+      : `<div class="feedback-verdict wrong">❌ 오답 <span style="font-size:0.9rem;opacity:0.85">— 정답: ${escapeHtml(String(correctAnswer||''))}</span></div>`;
     const why = isBusy ? 'AI 서버가 혼잡해서 풀이 설명을 불러오지 못했어요.' : `풀이 설명을 불러오지 못했어요. (${e.message})`;
     resultBox.innerHTML = `${verdictHtml}<div style="color:var(--text2);font-size:0.85rem;margin-top:8px;">${why}</div>${retryBtn}`;
     renderMath(resultBox);

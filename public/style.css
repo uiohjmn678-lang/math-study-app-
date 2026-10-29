@@ -816,3 +816,10 @@ mjx-container:not([display="true"])::-webkit-scrollbar {
 .rp-send { border: none; background: var(--accent, #4A90E2); color: #fff; }
 .rp-send:disabled { opacity: 0.6; cursor: default; }
 .rp-msg { font-size: 0.8rem; color: var(--red, #d14343); margin-top: 8px; min-height: 16px; }
+
+/* 헤더의 AI 튜터 버튼 — 폰에서는 글자를 빼고 아이콘만 남긴다 */
+.tutor-btn { font-size: 0.85rem; padding: 8px 14px; }
+@media (max-width: 768px) {
+  .tutor-btn-label { display: none; }
+  .tutor-btn { padding: 8px 11px; font-size: 1rem; }
+}
