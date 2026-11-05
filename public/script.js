@@ -638,7 +638,33 @@ function jobRes(status, obj) {
 // 사진분석·풀이피드백·AI 튜터 네 곳은 구글 영어 원문을 그대로 띄웠다.
 const AI_RETRY_WAIT_MS = [4000, 8000];
 
-async function aiFetch(body) {
+// ============ AI 이중화 — 제미나이가 막히면 클로드로 ============
+// 오후 8시처럼 사람이 몰리는 시간에 구글이 503(혼잡)을 돌려준다.
+// 이건 우리 할당량이 아니라 구글이 전 세계와 나눠 쓰는 용량 문제라,
+// 요금제를 올려도 해결되지 않는다. 기다리는 것 말고 할 수 있는 게 없었다.
+// 그래서 회사가 다른 AI 를 예비로 둔다. 두 회사가 같은 시각에 동시에
+// 막힐 일은 드물어서, 한쪽이 막혀도 서비스가 멈추지 않는다.
+//
+// 순서
+//   1) 제미나이 — 혼잡하면 4초·8초 간격으로 다시
+//   2) 그래도 막히면 클로드
+//   3) 둘 다 막히면 15초 쉬었다 1)~2) 를 한 번 더
+//   4) 그래도 안 되면 한국어 안내
+// 번역은 서버(claude.js)가 한다. 그래서 이 아래 호출부들은 하나도 안 고쳤다.
+const ALT_URL        = '/.netlify/functions/claude';
+const ALT_FINAL_WAIT = 15000;   // 둘 다 막혔을 때 한 번 더 가기 전 쉬는 시간
+// 전체 제한 시간. 이걸 넘으면 마지막 한 바퀴를 생략한다.
+// 없으면 학생이 몇 분 동안 도는 스피너만 보게 된다. 그게 더 나쁘다.
+const ALT_DEADLINE_MS = 100000;
+
+// 갈아타서 해결될 만한 오류인지. 혼잡·과부하·서버 오류만 해당한다.
+// 로그인 만료(401)나 미승인(403)은 예비 AI 로 가도 똑같이 거절당한다.
+function isBusyStatus(s) {
+  return s === 429 || s === 503 || s === 529 || s === 500 || s === 502 || s === 504;
+}
+
+// 제미나이 쪽. 기존 재시도 동작 그대로다.
+async function geminiWithRetry(body) {
   let res;
   for (let attempt = 0; attempt <= AI_RETRY_WAIT_MS.length; attempt++) {
     res = await aiFetchOnce(body);
@@ -646,11 +672,61 @@ async function aiFetch(body) {
     if (res.status !== 503 && res.status !== 429) return res;   // 혼잡이 아니면 그대로 돌려준다
     if (attempt === AI_RETRY_WAIT_MS.length) break;
     const wait = AI_RETRY_WAIT_MS[attempt];
-    console.warn(`[AI] ${res.status} 혼잡 — ${wait / 1000}초 뒤 재시도 (${attempt + 1}/${AI_RETRY_WAIT_MS.length})`);
+    console.warn(`[AI] 제미나이 ${res.status} 혼잡 — ${wait / 1000}초 뒤 재시도 (${attempt + 1}/${AI_RETRY_WAIT_MS.length})`);
     await new Promise(r => setTimeout(r, wait));
   }
-  // 끝까지 혼잡하면, 구글 영어 원문 대신 한국어로 바꿔 돌려준다
-  return jobRes(res.status, { error: { message:
+  return res;
+}
+
+// 클로드 쪽. 보내는 내용은 제미나이와 똑같은 형식이고, 서버가 통역한다.
+// 앤트로픽 키가 아직 등록 안 돼 있으면 서버가 503 을 주고, 앱은 그냥 넘어간다.
+async function claudeFetch(body) {
+  try {
+    return await fetch(ALT_URL, {
+      method: 'POST', headers: await aiHeaders(), body: JSON.stringify(body)
+    });
+  } catch (e) {
+    return jobRes(502, { error: { message: '예비 AI 서버에 연결하지 못했습니다.' } });
+  }
+}
+
+async function aiFetch(body) {
+  const startedAt = Date.now();
+  let last;
+
+  for (let round = 1; round <= 2; round++) {
+    // --- 1차: 제미나이 ---
+    last = await geminiWithRetry(body);
+    if (last.ok) return last;
+    if (!isBusyStatus(last.status)) return last;   // 갈아타도 소용없는 오류는 그대로
+
+    // --- 2차: 클로드 ---
+    console.warn(`[AI] 제미나이 ${last.status} — 예비 AI(클로드)로 넘어갑니다. (${round}바퀴)`);
+    const alt = await claudeFetch(body);
+    if (alt.ok) {
+      console.log('[AI] 예비 AI 로 처리했습니다.');
+      return alt;
+    }
+    console.warn(`[AI] 예비 AI 도 실패 (${alt.status})`);
+    if (!isBusyStatus(alt.status)) {
+      // 예비 AI 가 로그인·형식 문제로 거절한 거라면 한 바퀴 더 돌아도 같다.
+      // 학생에게는 처음에 막은 제미나이 쪽 상태를 보여주는 게 맞다.
+      break;
+    }
+
+    // --- 3차: 둘 다 막혔으면 쉬었다 한 번 더 ---
+    if (round === 1) {
+      if (Date.now() - startedAt > ALT_DEADLINE_MS) {
+        console.warn('[AI] 시간이 너무 걸려 마지막 재시도를 건너뜁니다.');
+        break;
+      }
+      console.warn(`[AI] 둘 다 혼잡 — ${ALT_FINAL_WAIT / 1000}초 뒤 한 번 더 시도합니다.`);
+      await new Promise(r => setTimeout(r, ALT_FINAL_WAIT));
+    }
+  }
+
+  // 끝까지 안 되면, 영어 원문 대신 한국어로 바꿔 돌려준다
+  return jobRes(last.status, { error: { message:
     'AI 서버에 요청이 몰려 있습니다. 1~2분 뒤에 다시 시도해 주세요.' } });
 }
 
@@ -2650,7 +2726,7 @@ async function fetchFromBank(type, level, opt = {}) {
         usedLevel === want ? `${usedLevel}점` : `${usedLevel}점 (요청 ${want}점 없어 대체)`,
         `(남은 ${entry.byLevel[usedLevel].queue.length}개)`);
     }
-    return { visibleText: picked.visibleText, answer: picked.answer, hint: picked.hint || '', level: usedLevel, desmos: picked.desmos || [] };
+    return { visibleText: picked.visibleText, answer: picked.answer, hint: picked.hint || '', level: usedLevel, desmos: picked.desmos || [], solution: picked.solution || '' };
   } catch (err) {
     console.warn('[fetchFromBank] 은행 조회 실패:', err.code || '', err.message);
     return null;
@@ -2722,7 +2798,7 @@ window.getBasicProblems = async function(mode) {
     if (!parsed) {
       itemEl.innerHTML = `<div style="color:var(--text2);padding:8px;">문제를 불러오지 못했어요. 다시 시도해주세요. 🔄</div>`;
     } else {
-      itemEl.innerHTML = renderMultiProblemItem(1, parsed.visibleText, parsed.hint, parsed.answer, 'basic', 'ai', type, '', parsed.level, parsed.desmos);
+      itemEl.innerHTML = renderMultiProblemItem(1, parsed.visibleText, parsed.hint, parsed.answer, 'basic', 'ai', type, '', parsed.level, parsed.desmos, parsed.solution);
       renderMath(itemEl);
       renderCardGraphs(itemEl);
     }
@@ -2874,7 +2950,7 @@ async function showIntensiveProblem() {
         ok = false;
         itemEl.innerHTML = `<div style="color:var(--text2);padding:8px;">검증을 통과하는 문제를 만들지 못했어요. 다시 시도하거나, 수능 기출로 풀어보세요. 🔄</div>`;
       } else {
-        itemEl.innerHTML = renderMultiProblemItem(S.idx, parsed.visibleText, parsed.hint, parsed.answer, 'intensive', 'ai', S.type, '', parsed.level, parsed.desmos);
+        itemEl.innerHTML = renderMultiProblemItem(S.idx, parsed.visibleText, parsed.hint, parsed.answer, 'intensive', 'ai', S.type, '', parsed.level, parsed.desmos, parsed.solution);
         renderMath(itemEl);
         renderCardGraphs(itemEl);
       }
@@ -2967,7 +3043,7 @@ function renderMultiProblems(items, wrap, section, mode) {
   attachChoiceListeners(wrap);
 }
 
-function renderMultiProblemItem(idx, text, hint, answer, section, mode, type, extra, level, desmos) {
+function renderMultiProblemItem(idx, text, hint, answer, section, mode, type, extra, level, desmos, solution) {
   hint = hint || '';
   text = text || '';
   const extraLabel = extra ? `<span style="font-size:0.8rem;color:var(--text3);margin-left:8px;">${extra}</span>` : '';
@@ -2986,7 +3062,7 @@ function renderMultiProblemItem(idx, text, hint, answer, section, mode, type, ex
        </div>`
     : '';
   return `
-    <div class="multi-problem-card" data-answer="${answer}" data-hint="${hint.replace(/"/g,"'")}" data-problem="${encodeURIComponent(text || '')}" data-source="${mode}" data-idx="${idx}" data-type="${type || ''}">
+    <div class="multi-problem-card" data-answer="${answer}" data-hint="${hint.replace(/"/g,"'")}" data-problem="${encodeURIComponent(text || '')}" data-source="${mode}" data-idx="${idx}" data-type="${type || ''}" data-solution="${encodeURIComponent(solution || '')}">
       <div class="multi-problem-header">
         <span class="multi-problem-num">문제 ${idx}${levelBadge}</span>
         <span style="font-size:0.82rem;color:var(--text2);">${type || ''}${extraLabel}</span>
@@ -3232,7 +3308,10 @@ async function doCheckAnswer(card, section) {
   };
 
   try {
-    const result = await callGemini(prompt, 5500, 2000);
+    // 미리 만들어 은행에 넣어 둔 풀이가 있으면 그것을 쓴다. AI 를 부르지 않으므로
+    // 즉시 뜨고, 외부 AI 서버가 혼잡해도 영향을 받지 않는다. 없으면 예전처럼 호출한다.
+    const stored = card.dataset.solution ? decodeURIComponent(card.dataset.solution) : '';
+    const result = stored || await callGemini(prompt, 5500, 2000);
     // 채점을 기다리는 동안 학생이 다른 탭(홈·통계 등)으로 가는 것은 괜찮다.
     // 탭은 숨겨질 뿐 사라지지 않아서, 결과가 도착하면 그 자리에 그대로 들어간다.
     // 반면 "새 문제 불러오기" 를 누르면 목록이 통째로 갈아끼워져 이 칸이 없어진다.
