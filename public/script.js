@@ -631,7 +631,30 @@ function jobRes(status, obj) {
   };
 }
 
+// 503(구글 서버 혼잡)·429(요청 과다)를 여기서 흡수한다.
+// 이 함수는 앱의 모든 AI 호출이 반드시 지나는 길목이라, 여기 한 곳만 막으면
+// 해설·채점·레벨테스트·사진분석·AI 튜터가 한꺼번에 보호된다.
+// 예전에는 callGemini 안에만 재시도가 있어서, aiFetch 를 직접 부르는
+// 사진분석·풀이피드백·AI 튜터 네 곳은 구글 영어 원문을 그대로 띄웠다.
+const AI_RETRY_WAIT_MS = [4000, 8000];
+
 async function aiFetch(body) {
+  let res;
+  for (let attempt = 0; attempt <= AI_RETRY_WAIT_MS.length; attempt++) {
+    res = await aiFetchOnce(body);
+    if (res.ok) return res;
+    if (res.status !== 503 && res.status !== 429) return res;   // 혼잡이 아니면 그대로 돌려준다
+    if (attempt === AI_RETRY_WAIT_MS.length) break;
+    const wait = AI_RETRY_WAIT_MS[attempt];
+    console.warn(`[AI] ${res.status} 혼잡 — ${wait / 1000}초 뒤 재시도 (${attempt + 1}/${AI_RETRY_WAIT_MS.length})`);
+    await new Promise(r => setTimeout(r, wait));
+  }
+  // 끝까지 혼잡하면, 구글 영어 원문 대신 한국어로 바꿔 돌려준다
+  return jobRes(res.status, { error: { message:
+    'AI 서버에 요청이 몰려 있습니다. 1~2분 뒤에 다시 시도해 주세요.' } });
+}
+
+async function aiFetchOnce(body) {
   // DIRECT        : 로컬에서 키를 직접 꽂고 급히 테스트할 때 → 구글로 바로 호출
   // USE_BACKGROUND: false 면 예전 방식(일반 함수 gemini.js, 30초 제한)
   if (DIRECT || !USE_BACKGROUND) {
@@ -871,12 +894,8 @@ async function callGemini(prompt, maxTokens = 24000, thinkOverride = null) {
 
     const status = res.status;
     if (status === 503 || status === 429) {
-      if (attempt < 3) {
-        await new Promise(r => setTimeout(r, 1500 * attempt));
-        continue;
-      }
-      // 3번 재시도 후에도 혼잡하면 식별 가능한 에러로 표시
-      const busyErr = new Error('서버가 혼잡합니다. 잠시 후 다시 시도해주세요.');
+      // 재시도는 aiFetch 가 이미 했다. 여기서 또 하면 기다림이 곱절이 된다.
+      const busyErr = new Error('AI 서버에 요청이 몰려 있습니다. 1~2분 뒤에 다시 시도해 주세요.');
       busyErr.isBusy = true;
       throw busyErr;
     }
@@ -914,11 +933,8 @@ async function callGeminiUrl(targetUrl, prompt, maxTokens = 2000) {
     }
     const status = res.status;
     if (status === 503 || status === 429) {
-      if (attempt < 3) {
-        await new Promise(r => setTimeout(r, 1500 * attempt));
-        continue;
-      }
-      const busyErr = new Error('서버가 혼잡합니다. 잠시 후 다시 시도해주세요.');
+      // 재시도는 aiFetch 가 이미 했다.
+      const busyErr = new Error('AI 서버에 요청이 몰려 있습니다. 1~2분 뒤에 다시 시도해 주세요.');
       busyErr.isBusy = true;
       throw busyErr;
     }
