@@ -381,9 +381,51 @@ const auth = getAuth(app);
 const db = getFirestore(app, 'math-study-app');
 let currentUserId = null;
 
+// ============ 계정이 바뀌면 이 브라우저에 남은 기록을 비운다 ============
+// ★ 이 앱은 이름·등급·점수·오답노트를 localStorage 에도 둔다. 화면을 빨리 띄우려고
+//   Firestore 응답을 기다리지 않고 먼저 보여주기 위해서다.
+//   그런데 localStorage 는 브라우저 단위라 계정을 가리지 않는다. 그래서 예전에는
+//   다른 계정으로 로그인해도 앞사람의 이름·등급·점수가 그대로 떠 있었다.
+//   (새 계정은 Firestore 프로필이 비어 있어 덮어쓰지도 못한다.)
+//   한 컴퓨터를 여러 명이 쓰는 상황 — 테스터 돌리기, 전시회 시연 — 에서 특히 나쁘다.
+const USER_KEYS = [
+  'student_name', 'current_grade', 'current_score', 'weak_types',
+  'score_history', 'unit_score_history', 'ai_stats', 'suneung_stats',
+  'total_problems', 'correct_problems', 'streak', 'last_study_date',
+  'earned_badges', 'unit_progress', 'wrong_notes',
+  'last_analysis_result', 'last_analysis_title', 'curriculum',
+  'bank_seen_ids',          // 이미 낸 문제 기록도 사람마다 달라야 한다
+];
+const OWNER_KEY = 'owner_uid';
+
+function clearUserLocalData() {
+  USER_KEYS.forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
+}
+
+// 로그인한 사람이 바뀌었으면 비우고 새로 그린다.
+// state 는 파일이 읽힐 때 localStorage 에서 만들어지므로, 비우기만 해서는
+// 이미 화면에 뜬 앞사람 값이 안 사라진다. 그래서 한 번 새로고침한다.
+function ensureOwner(uid) {
+  let prev = null;
+  try { prev = localStorage.getItem(OWNER_KEY); } catch (e) {}
+  if (prev === uid) return false;
+
+  clearUserLocalData();
+  try { localStorage.setItem(OWNER_KEY, uid); } catch (e) {}
+
+  // prev 가 없고 남은 기록도 없으면 그냥 처음 쓰는 것 — 새로고침할 필요 없다.
+  if (!prev) {
+    const leftover = USER_KEYS.some(k => { try { return localStorage.getItem(k) !== null; } catch (e) { return false; } });
+    if (!leftover) return false;
+  }
+  location.reload();
+  return true;
+}
+
 // 로그인 상태 감지 → userId 저장
 onAuthStateChanged(auth, (user) => {
   if (user) {
+    if (ensureOwner(user.uid)) return;   // 새로고침 중이면 아래는 의미 없다
     currentUserId = user.uid;
     loadUserDataFromFirestore();
   }
@@ -2676,7 +2718,11 @@ function buildMathPicker() {
 // 단원별로 처음 한 번만 Firestore에서 받아 메모리에 캐시한다.
 // - 읽기 비용: 단원당 첫 조회 때만 문서 수만큼(약 20회), 이후 0회
 // - 다양성: 캐시를 섞어 순서대로 내보내므로 전부 볼 때까지 같은 문제가 안 나옴
-const BANK_DEBUG = false;          // true로 바꾸면 조회 로그 출력
+// 주소 끝에 ?bankdebug 를 붙이면 켜진다. 예: mathscan-ai.netlify.app/?bankdebug
+// 코드에 true 로 박아 두면 켤 때마다 배포를 해야 해서, 주소로 켜고 끌 수 있게 했다.
+const BANK_DEBUG = (() => {
+  try { return /[?&]bankdebug/i.test(location.search); } catch (e) { return false; }
+})();
 // [v3] 캐시 구조: type -> { all: [], byLevel: { '2': {all,queue}, '3': {...}, '4': {...} } }
 // Firestore 조회는 단원당 한 번 그대로. 배점 분류는 메모리에서 하므로 읽기 비용이 늘지 않는다.
 const _bankCache = {};

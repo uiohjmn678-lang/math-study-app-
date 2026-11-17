@@ -96,10 +96,23 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 // ===== 로그아웃 (index.html에서 사용) =====
+// 이 브라우저에 남는 학습 기록. 로그아웃할 때 비운다.
+// ★ 예전에는 "데이터 보존"을 이유로 남겨 뒀는데, localStorage 는 계정을 가리지 않아서
+//   다음 사람이 로그인해도 앞사람의 이름·등급·점수가 그대로 떠 있었다.
+//   진짜 데이터는 Firestore 에 있으므로 여기서 지워도 다시 로그인하면 돌아온다.
+const LOGOUT_CLEAR = [
+  'student_name', 'current_grade', 'current_score', 'weak_types',
+  'score_history', 'unit_score_history', 'ai_stats', 'suneung_stats',
+  'total_problems', 'correct_problems', 'streak', 'last_study_date',
+  'earned_badges', 'unit_progress', 'wrong_notes',
+  'last_analysis_result', 'last_analysis_title', 'curriculum',
+  'bank_seen_ids', 'owner_uid',
+];
+
 window.doLogout = async function() {
   try {
-    // API 키만 제거, 성적/커리큘럼 데이터는 보존
     localStorage.removeItem('gemini_api_key');
+    LOGOUT_CLEAR.forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
     await signOut(auth);
     window.location.href = 'auth.html';
   } catch (e) {
