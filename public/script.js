@@ -395,6 +395,7 @@ const USER_KEYS = [
   'earned_badges', 'unit_progress', 'wrong_notes',
   'last_analysis_result', 'last_analysis_title', 'curriculum',
   'bank_seen_ids',          // 이미 낸 문제 기록도 사람마다 달라야 한다
+  'level_test_state',       // 레벨 테스트 진행·결과도 사람마다 다르다
 ];
 const OWNER_KEY = 'owner_uid';
 
@@ -2774,8 +2775,11 @@ function _isNaturalAnswer(ans) {
 // 배점 하나에서 아직 안 낸 문제를 꺼낸다.
 // 그 배점을 전부 다 풀었으면 해당 단원·배점만 기록을 비우고 다시 돈다.
 // (다른 단원의 기록은 건드리지 않는다)
-// naturalOnly 가 켜지면 답이 자연수인 문항만 꺼낸다. 그런 문항이 하나도 없으면
-// 조건을 풀고 아무거나 꺼낸다 — 문제를 못 내는 것보다는 낫다.
+// naturalOnly 가 켜지면 답이 자연수인 문항만 꺼낸다. 없으면 null 을 돌려준다.
+// ★ 예전에는 여기서 바로 조건을 풀고 분수 답 문항을 꺼냈다. 그런데 호출하는 쪽은
+//   picked 가 나오면 바로 멈추므로, 대체 배점(4점 -> 3점)에 자연수 답 문항이
+//   멀쩡히 남아 있어도 거기까지 가지 못하고 분수 답이 레벨 테스트에 나갔다.
+//   포기는 모든 배점을 다 훑어본 뒤에 fetchFromBank 가 결정한다.
 function _takeFromLevel(entry, lv, naturalOnly) {
   const slot = entry.byLevel[lv];
   if (!slot || slot.all.length === 0) return null;
@@ -2792,7 +2796,7 @@ function _takeFromLevel(entry, lv, naturalOnly) {
   if (naturalOnly) {
     const i = slot.queue.findIndex(ok);
     if (i >= 0) return slot.queue.splice(i, 1)[0];
-    // 이 단원·배점에는 자연수 답 문항이 아예 없다 -> 조건을 포기한다
+    return null;   // 이 단원·배점엔 자연수 답이 없다 -> 다른 배점을 보라고 알린다
   }
   return slot.queue.shift();
 }
@@ -2803,7 +2807,7 @@ async function fetchFromBank(type, level, opt = {}) {
   try {
     let entry = _bankCache[type];
     if (!entry) {
-      const snap = await getDocs(query(collection(db, 'ai_problems'), where('type', '==', type), limit(100)));
+      const snap = await getDocs(query(collection(db, 'ai_problems'), where('type', '==', type), limit(400)));
       const all = [];
       // 문서 ID 를 같이 담는다. 이게 있어야 "이미 낸 문제"를 구분할 수 있다.
       snap.forEach(d => all.push({ ...d.data(), _id: d.id }));
@@ -2821,11 +2825,17 @@ async function fetchFromBank(type, level, opt = {}) {
     }
     if (entry.all.length === 0) return null;          // 은행에 이 단원 없음 -> 라이브 fallback
 
-    // 요청 배점 -> 없으면 대체 배점 순서대로
+    // 요청 배점 -> 없으면 대체 배점 순서대로.
+    // naturalOnly 는 2번 돈다: 먼저 모든 배점에서 자연수 답을 찾고,
+    // 그래도 없으면 조건을 풀고 다시 돈다. 문제를 못 내는 것보다는 낫기 때문이다.
+    const levels = opt.levels || LEVEL_FALLBACK[want] || ['4', '3', '2'];
     let picked = null, usedLevel = null;
-    for (const lv of (opt.levels || LEVEL_FALLBACK[want] || ['4', '3', '2'])) {
-      picked = _takeFromLevel(entry, lv, opt.naturalOnly);
-      if (picked) { usedLevel = lv; break; }
+    for (const strict of (opt.naturalOnly ? [true, false] : [false])) {
+      for (const lv of levels) {
+        picked = _takeFromLevel(entry, lv, strict);
+        if (picked) { usedLevel = lv; break; }
+      }
+      if (picked) break;
     }
     if (!picked) return null;
 
@@ -2842,6 +2852,24 @@ async function fetchFromBank(type, level, opt = {}) {
   }
 }
 
+// ============ 수능 기출(questions) 캐시 ============
+// ★ 예전에는 "수능 DB" 를 누를 때마다 컬렉션을 통째로 읽었다. 기출이 230문항이라
+//   한 번 누를 때마다 Firestore 읽기가 230회씩 쌓이고, 그걸 하는 곳이 세 군데였다.
+//   Firestore 무료 한도는 하루 50,000회다. 테스터 8명이 각자 서른 번쯤 누르면
+//   그날 한도가 끝나고 앱 전체가 멈춘다. 전시회 중에 그러면 되돌릴 방법이 없다.
+//   페이지를 열고 딱 한 번만 읽어서 메모리에 둔다. 두 번째부터는 읽기 0회다.
+//   호출한 쪽에서 sort 로 섞으니 사본을 돌려줘서 캐시가 흐트러지지 않게 한다.
+let _questionsCache = null;
+async function getSuneungQuestions() {
+  if (_questionsCache) return _questionsCache.slice();
+  const snap = await getDocs(collection(db, 'questions'));
+  const all = [];
+  snap.forEach(d => all.push(d.data()));
+  _questionsCache = all;
+  if (BANK_DEBUG) console.log('[기출] 캐시 적재:', all.length + '문항 (이후 읽기 0회)');
+  return all.slice();
+}
+
 // ============ 기본 문제 - 다중 출제 ============
 window.getBasicProblems = async function(mode) {
   state.lastBasicMode = mode;
@@ -2854,17 +2882,10 @@ window.getBasicProblems = async function(mode) {
   if (mode === 'db') {
     // 수능 DB에서 선택 과목 필터링 후 10개
     try {
-      const db2 = db; // 동일 named DB 재사용
-      const snap = await getDocs(collection(db2, 'questions'));
-      const all = [];
+      // 선택한 단원이 속한 과목(section)의 문제만 출제. 공통은 공통 단원 선택 시에만 나옴.
       const targetSection = getSectionFromType(type);
-      snap.forEach(d => {
-        const item = d.data();
-        // 선택한 단원이 속한 과목(section)의 문제만 출제. 공통은 공통 단원 선택 시에만 나옴.
-        if (!targetSection || item.section === targetSection) {
-          all.push(item);
-        }
-      });
+      const all = (await getSuneungQuestions())
+        .filter(item => !targetSection || item.section === targetSection);
       if (all.length === 0) {
         listWrap.innerHTML = '<p style="color:var(--text2);padding:16px;">해당 과목의 기출 문제가 없어요.</p>';
         return;
@@ -2979,14 +3000,9 @@ window.startIntensiveMulti = async function(mode) {
 
   if (mode === 'db') {
     try {
-      const db2 = db; // 동일 named DB 재사용
-      const snap = await getDocs(collection(db2, 'questions'));
-      const all = [];
       const targetSection = getSectionFromType(targetType);
-      snap.forEach(d => {
-        const item = d.data();
-        if (!targetSection || item.section === targetSection) all.push(item);
-      });
+      const all = (await getSuneungQuestions())
+        .filter(item => !targetSection || item.section === targetSection);
       if (all.length === 0) {
         listWrap.innerHTML = '<p style="color:var(--text2);padding:16px;">해당 유형의 기출 문제가 없어요.</p>';
         return;
@@ -3369,13 +3385,23 @@ function _toNum(s) {
     const d = parseInt(frac[2], 10);
     if (d !== 0) return parseInt(frac[1], 10) / d;
   }
-  // π 가 붙은 답. 24π, -3π, 3/2π, π
-  const pi = s.match(/^(-?)(\d+(?:\.\d+)?)?(?:\/(\d+))?π$/);
+  // (a/b)π 꼴. 괄호를 푸는 일반 규칙에 맡기면 2(1/3) 같은 것도 21/3 로 바뀌어
+  // 엉뚱한 수가 나오므로, 이 모양만 좁게 집어서 읽는다.
+  const pfrac = s.match(/^(-?)\((\d+(?:\.\d+)?)\/(\d+)\)π$/);
+  if (pfrac) {
+    const d = parseInt(pfrac[3], 10);
+    if (d !== 0) return (pfrac[1] === '-' ? -1 : 1) * parseFloat(pfrac[2]) / d * Math.PI;
+  }
+  // π 가 붙은 답. 24π, -3π, 3/2π, π, π/3, 2π/3
+  // ★ π/3 (기본 각도라 제일 많이 쓰는 꼴) 이 빠져 있었다. 그러면 학생이 π/3 라고
+  //   쓰고 저장된 정답이 (1/3)π 일 때 수치 비교로 가지 못해 오답 처리된다.
+  const pi = s.match(/^(-?)(\d+(?:\.\d+)?)?(?:\/(\d+))?π(?:\/(\d+))?$/);
   if (pi) {
     const sign = pi[1] === '-' ? -1 : 1;
     const a = pi[2] === undefined ? 1 : parseFloat(pi[2]);
     const b = pi[3] === undefined ? 1 : parseInt(pi[3], 10);
-    if (b !== 0) return sign * a / b * Math.PI;
+    const c = pi[4] === undefined ? 1 : parseInt(pi[4], 10);
+    if (b !== 0 && c !== 0) return sign * a / b / c * Math.PI;
   }
   return null;
 }
@@ -3554,10 +3580,7 @@ async function getSuneungProblem() {
   document.getElementById('solveGraph').classList.add('hidden');
 
   try {
-    const db2 = db; // 동일 named DB 재사용
-    const snap = await getDocs(collection(db2, 'questions'));
-    const all = [];
-    snap.forEach(d => all.push(d.data()));
+    const all = await getSuneungQuestions();
 
     if (all.length === 0) { problemBox.innerHTML = '<span style="color:var(--red)">기출 문제가 없어요.</span>'; return; }
 
@@ -4037,7 +4060,7 @@ async function checkIntensive() {
   }
 }
 window.checkIntensive = checkIntensive;
-function renderFeedback(raw, isCorrect, compact = false, trueAnswer = '') {
+function renderFeedback(raw, isCorrect, compact = false, trueAnswer = '', showVerdict = true) {
   const text = raw
     .replace(/#{1,6}\s*/g, '')
     .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')
@@ -4052,7 +4075,11 @@ function renderFeedback(raw, isCorrect, compact = false, trueAnswer = '') {
   // escapeHtml 필수: 정답이 부등식(x<3, a<b)이면 브라우저가 <3 부터를 태그로 먹어
   // "정답:" 뒤가 통째로 사라진다. 학생이 매 문제마다 보는 줄이라 제일 먼저 막아야 한다.
   const answerHtml = escapeHtml(answerText);
-  const verdict = isCorrect
+  // showVerdict:false -> 정답/오답 줄을 빼고 풀이만 낸다.
+  // 틀린 문제 다시 보기는 바로 윗줄에 "내 답 | 정답" 이 이미 있어서, 여기서 또
+  // "❌ 오답 — 정답: 7" 을 내면 같은 말이 두 번 나온다.
+  const verdict = !showVerdict ? ''
+    : isCorrect
     ? `<div class="feedback-verdict correct">✅ 정답!${answerText ? ` <span style="font-size:1.5rem;font-weight:800">(${answerHtml})</span>` : ''}</div>`
     : `<div class="feedback-verdict wrong">❌ 오답${answerText ? ` <span style="font-size:1.5rem;font-weight:800">— 정답: ${answerHtml}</span>` : ''}</div>`;
 
@@ -5107,7 +5134,10 @@ function showError(boxId, contentId, msg) {
 }
 
 function escapeHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  // ★ String() 필수. 예전 오답노트는 myAnswer 를 안 담고 저장된 것이 있어서
+  //   n.myAnswer 가 undefined 로 들어오면 .replace 가 예외를 던지고
+  //   오답노트 화면이 통째로 백지가 됐다. 부르는 곳이 20군데라 여기서 막는다.
+  return String(str == null ? '' : str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // API 키 없을 때 토스트 메시지
@@ -5199,7 +5229,9 @@ function renderLevelTestIntro() {
 
   ltLoad();
   const totalPages = ltState && ltState.items ? Math.ceil(ltState.items.length / LT_PAGE_SIZE) : 0;
-  const inProgress = ltState && ltState.items && ltState.page < totalPages;
+  const hasItems   = !!(ltState && ltState.items && ltState.items.length);
+  const inProgress = hasItems && ltState.page < totalPages;
+  const finished   = hasItems && ltState.page >= totalPages;
 
   if (inProgress) {
     el.innerHTML = `
@@ -5211,6 +5243,30 @@ function renderLevelTestIntro() {
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn-primary" onclick="resumeLevelTest()">이어서 풀기</button>
           <button class="btn-ghost" onclick="ltClearAndIntro()">처음부터 다시</button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  // ★ 다 푼 테스트에도 들어가는 문을 만들어 둔다.
+  //   예전에는 끝까지 풀고 새로고침하면 이 화면이 "선택과목을 골라주세요" 로 돌아갔다.
+  //   결과는 localStorage 에 그대로 남아 있는데 그리로 가는 버튼이 어디에도 없어서,
+  //   학생은 27문제를 푼 기록이 통째로 날아간 줄 안다. 실제로 그렇게 보였다.
+  //   (resumeLevelTest 는 이 경우를 이미 처리하는데, 그걸 부르는 버튼이 없었다)
+  if (finished) {
+    const done = ltState.items.filter(i => i.correct !== null);
+    const got  = done.filter(i => i.correct).length;
+    let when = '';
+    try { when = ltState.startedAt ? new Date(ltState.startedAt).toLocaleDateString('ko-KR') : ''; } catch (e) {}
+    el.innerHTML = `
+      <div style="padding:14px;border:1.5px solid var(--border);border-radius:12px;margin-bottom:12px;">
+        <strong>지난 테스트 결과가 있어요</strong>
+        <p style="color:var(--text2);font-size:0.9rem;margin:6px 0 10px;">
+          선택과목 ${escapeHtml(ltState.elective || '')} · ${done.length}문제 중 ${got}개 정답${when ? ' · ' + when : ''}
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn-primary" onclick="renderLevelTestResult()">결과 다시 보기</button>
+          <button class="btn-ghost" onclick="ltClearAndIntro()">새로 테스트하기</button>
         </div>
       </div>`;
     return;
@@ -5287,7 +5343,7 @@ window.startLevelTest = async function (elective) {
   if (items.length === 0) {
     intro.innerHTML = `
       <div style="color:var(--text2);padding:10px;">
-        문제 은행에서 2·3점 문제를 찾지 못했어요.<br/>
+        문제 은행에서 2·3·4점 문제를 찾지 못했어요.<br/>
         문제를 먼저 만들어 올린 뒤에 다시 시도해주세요.
       </div>
       <button class="btn-ghost" onclick="renderLevelTestIntro()" style="margin-top:8px;">돌아가기</button>`;
@@ -5579,21 +5635,33 @@ function ltSubjectOf(unitName) {
 }
 
 function ltAdviceHtml(s) {
-  // (1) 지금 상태 — 2점·3점 실제 개수로 설명한다
-  let state;
+  // (1) 지금 상태 — 2점·3점·4점 실제 개수로 설명한다
+  // ★ 변수명을 state 로 두면 앱 전역의 state 객체를 가려 버린다. 지금은 이 함수가
+  //   전역 state 를 안 쓰지만, 한 줄만 추가해도 조용히 깨지는 자리라 이름을 바꿨다.
+  let situation;
   if (s.n2 && s.p2 < 0.5) {
-    state = `2점은 ${s.n2}문제 중 ${s.c2}개를 맞혔어요. 2점은 공식을 그대로 넣으면 풀리는 문제예요. ` +
+    situation = `2점은 ${s.n2}문제 중 ${s.c2}개를 맞혔어요. 2점은 공식을 그대로 넣으면 풀리는 문제예요. ` +
             `거기서 막혔다는 건 문제를 덜 풀어서가 아니라 <strong>개념 자체가 아직 안 잡혔다</strong>는 뜻이라, ` +
             `문제를 더 푸는 것보다 개념을 먼저 보는 게 빨라요.`;
   } else if (s.p3 < 0.34) {
-    state = `2점(${s.c2}/${s.n2})은 잡았는데 3점(${s.c3}/${s.n3})에서 막혀요. ` +
+    situation = `2점(${s.c2}/${s.n2})은 잡았는데 3점(${s.c3}/${s.n3})에서 막혀요. ` +
             `3점은 개념 두 개를 엮어야 풀려요. 아는 공식을 <strong>언제 꺼내 쓸지</strong>가 아직 안 붙은 단계예요.`;
   } else if (s.p3 < 0.67) {
-    state = `2점(${s.c2}/${s.n2})은 안정적이고 3점(${s.c3}/${s.n3})은 절반쯤이에요. ` +
+    situation = `2점(${s.c2}/${s.n2})은 안정적이고 3점(${s.c3}/${s.n3})은 절반쯤이에요. ` +
             `지금 점수를 가장 많이 올려 주는 구간이 바로 이 3점이에요.`;
+  } else if (!s.n4) {
+    // 4점이 한 문항도 안 나온 경우 (그 단원·배점에 문제가 없을 때)
+    situation = `2점(${s.c2}/${s.n2})·3점(${s.c3}/${s.n3}) 모두 잘 잡혀 있어요. ` +
+            `다만 이번 테스트에 4점이 나오지 않아 그 위는 재지 못했어요.`;
+  } else if (s.p4 >= 0.85) {
+    situation = `2점(${s.c2}/${s.n2})·3점(${s.c3}/${s.n3})에 4점(${s.c4}/${s.n4})까지 거의 다 맞혔어요. ` +
+            `이 테스트로 잴 수 있는 위쪽 끝이에요. 여기부터는 기출 변형과 실전 모의고사가 맞아요.`;
+  } else if (s.p4 >= 0.5) {
+    situation = `2점(${s.c2}/${s.n2})·3점(${s.c3}/${s.n3})은 안정적이고 4점(${s.c4}/${s.n4})에서 갈려요. ` +
+            `등급을 올리는 건 결국 이 4점이라, <strong>틀린 4점 문항의 단원</strong>만 파는 게 가장 빨라요.`;
   } else {
-    state = `2점(${s.c2}/${s.n2})·3점(${s.c3}/${s.n3}) 모두 잘 잡혀 있어요. ` +
-            `이 테스트는 4점을 내지 않아서 여기까지만 잴 수 있어요. 다음은 4점 연습이에요.`;
+    situation = `2점(${s.c2}/${s.n2})·3점(${s.c3}/${s.n3})은 잡았는데 4점(${s.c4}/${s.n4})에서 막혀요. ` +
+            `4점은 개념을 아는 것과 별개로 <strong>조건을 꺼내 쓰는 연습</strong>이 필요해요. 지금 벽이 여기예요.`;
   }
 
   // (2) 뭐부터 — 약점 단원을 교육과정 순서로 세워 앞에서 3개
@@ -5602,10 +5670,11 @@ function ltAdviceHtml(s) {
     .sort((a, b) => ltUnitOrder(a.type) - ltUnitOrder(b.type))
     .slice(0, 3);
 
+  // 문항이 모자란 단원은 3문제가 아닐 수 있으므로 실제 개수로 말한다.
   const why = (u, i) => {
-    if (u.correct === 0) return '3문제 다 틀렸어요. 개념 설명부터 다시 보는 게 맞아요.';
+    if (u.correct === 0) return `${u.total}문제 다 틀렸어요. 개념 설명부터 다시 보는 게 맞아요.`;
     if (i === 0)         return '뒤에 나오는 단원들이 이 단원을 쓰기 때문에 여기부터예요.';
-    return '하나만 맞혔어요. 기본 유형을 반복해서 손에 붙이세요.';
+    return `${u.correct}개만 맞혔어요. 기본 유형을 반복해서 손에 붙이세요.`;
   };
 
   const todo = weakUnits.length
@@ -5640,7 +5709,7 @@ function ltAdviceHtml(s) {
   return `
     <h4 style="margin:20px 0 8px;font-size:0.95rem;">📌 그래서 뭐부터 하면 되나</h4>
     <div style="padding:14px;border:1.5px solid var(--border);border-radius:12px;">
-      <div style="font-size:0.9rem;line-height:1.6;color:var(--text);margin-bottom:10px;">${state}</div>
+      <div style="font-size:0.9rem;line-height:1.6;color:var(--text);margin-bottom:10px;">${situation}</div>
       ${todo}
       ${strongHtml}
     </div>
@@ -5860,10 +5929,13 @@ window.ltReview = function () {
       </div>
       ${it.solution
         ? `<details style="margin-top:10px;">
-             <summary style="cursor:pointer;font-size:0.86rem;font-weight:600;color:var(--primary,#5B7FFF);">
+             <summary style="cursor:pointer;font-size:0.86rem;font-weight:600;color:var(--accent,#4A90E2);">
                해설 보기
              </summary>
-             <div style="margin-top:8px;">${renderFeedback(it.solution, false, true, it.answer || '')}</div>
+             <!-- compact:false — 이미 "해설 보기" 로 접혀 있는데 compact 를 켜면
+                  그 안에서 "📖 자세한 풀이 보기" 가 또 접혀서 두 번 눌러야 풀이가 나온다.
+                  showVerdict:false — 윗줄에 내 답·정답이 이미 있다. -->
+             <div style="margin-top:8px;">${renderFeedback(it.solution, false, false, it.answer || '', false)}</div>
            </details>`
         : `<p style="margin-top:10px;font-size:0.8rem;color:var(--text3);">
              이 문제는 해설이 저장되기 전에 출제되었어요. 다시 테스트하면 해설이 함께 나와요.

@@ -106,7 +106,7 @@ const LOGOUT_CLEAR = [
   'total_problems', 'correct_problems', 'streak', 'last_study_date',
   'earned_badges', 'unit_progress', 'wrong_notes',
   'last_analysis_result', 'last_analysis_title', 'curriculum',
-  'bank_seen_ids', 'owner_uid',
+  'bank_seen_ids', 'level_test_state', 'owner_uid',
 ];
 
 window.doLogout = async function() {
