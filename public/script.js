@@ -2382,9 +2382,15 @@ async function generateGoal() {
   goalContent.innerHTML = `
     <div class="curriculum-end-notice">
       <div style="font-size:2rem;margin-bottom:12px">📸</div>
-      <h3>먼저 모의고사 성적표를 올려주세요</h3>
-      <p>성적표를 분석하면 이번 달 말까지<br/>맞춤 커리큘럼이 자동으로 생성돼요</p>
-      <button class="btn-primary" onclick="navigateTo('analyze')" style="margin-top:16px">📸 성적표 업로드하러 가기</button>
+      <h3>먼저 실력을 한 번 재 주세요</h3>
+      <p>모의고사 성적표를 올리거나, 성적표가 없으면<br/>레벨 테스트를 풀면 맞춤 커리큘럼이 만들어져요</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:16px;">
+        <button class="btn-primary" onclick="navigateTo('analyze')">📸 성적표 업로드하기</button>
+        <button class="btn-ghost" onclick="navigateTo('analyze')">📝 레벨 테스트 풀기</button>
+      </div>
+      <p style="margin-top:10px;font-size:0.82rem;color:var(--text3);">
+        레벨 테스트를 이미 풀었다면 결과 화면에서 "이 결과로 학습 계획 만들기"를 눌러 주세요.
+      </p>
     </div>`;
 }
 
@@ -2682,11 +2688,41 @@ function _shuffle(arr) {
   }
   return a;
 }
-// 배점 하나에서 한 문제 꺼내기 (다 돌면 다시 섞어서 순환)
+// ---- 이미 낸 문제 기억 ----
+// _bankCache 의 queue 는 새로고침하면 사라진다. 그래서 예전에는 레벨 테스트에서
+// 푼 문제가 다음 날 트레이닝에 그대로 다시 나왔다. 학생은 답을 이미 아니까
+// 맞히고, 단원별 정답률과 약점 분석이 실제보다 좋게 나온다.
+// 출제한 문서 ID 를 브라우저에 남겨 두고 다음부터 건너뛴다.
+const SEEN_KEY = 'bank_seen_ids';
+let _seen = null;
+function _seenSet() {
+  if (!_seen) {
+    try { _seen = new Set(JSON.parse(localStorage.getItem(SEEN_KEY) || '[]')); }
+    catch (e) { _seen = new Set(); }
+  }
+  return _seen;
+}
+function _seenSave() {
+  // 은행 전체보다 넉넉한 상한. 오래된 것부터 버린다.
+  try { localStorage.setItem(SEEN_KEY, JSON.stringify([..._seenSet()].slice(-3000))); }
+  catch (e) {}
+}
+function _seenAdd(id) { if (id) { _seenSet().add(id); _seenSave(); } }
+
+// 배점 하나에서 아직 안 낸 문제를 꺼낸다.
+// 그 배점을 전부 다 풀었으면 해당 단원·배점만 기록을 비우고 다시 돈다.
+// (다른 단원의 기록은 건드리지 않는다)
 function _takeFromLevel(entry, lv) {
   const slot = entry.byLevel[lv];
   if (!slot || slot.all.length === 0) return null;
-  if (slot.queue.length === 0) slot.queue = _shuffle(slot.all);
+  const seen = _seenSet();
+
+  for (let i = 0; i < slot.queue.length; i++) {
+    if (!seen.has(slot.queue[i]._id)) return slot.queue.splice(i, 1)[0];
+  }
+  slot.all.forEach(p => seen.delete(p._id));
+  _seenSave();
+  slot.queue = _shuffle(slot.all);
   return slot.queue.shift();
 }
 // opt.levels 로 대체 배점 범위를 직접 지정할 수 있다.
@@ -2698,7 +2734,8 @@ async function fetchFromBank(type, level, opt = {}) {
     if (!entry) {
       const snap = await getDocs(query(collection(db, 'ai_problems'), where('type', '==', type), limit(100)));
       const all = [];
-      snap.forEach(d => all.push(d.data()));
+      // 문서 ID 를 같이 담는다. 이게 있어야 "이미 낸 문제"를 구분할 수 있다.
+      snap.forEach(d => all.push({ ...d.data(), _id: d.id }));
       // 배점별로 쪼개서 각각 섞어둔다. level 필드가 없는 옛 문제는 4점으로 본다.
       const byLevel = {};
       ['2', '3', '4'].forEach(lv => {
@@ -2726,7 +2763,8 @@ async function fetchFromBank(type, level, opt = {}) {
         usedLevel === want ? `${usedLevel}점` : `${usedLevel}점 (요청 ${want}점 없어 대체)`,
         `(남은 ${entry.byLevel[usedLevel].queue.length}개)`);
     }
-    return { visibleText: picked.visibleText, answer: picked.answer, hint: picked.hint || '', level: usedLevel, desmos: picked.desmos || [], solution: picked.solution || '' };
+    _seenAdd(picked._id);   // 다음부터 이 문제는 건너뛴다
+    return { _id: picked._id, visibleText: picked.visibleText, answer: picked.answer, hint: picked.hint || '', level: usedLevel, desmos: picked.desmos || [], solution: picked.solution || '' };
   } catch (err) {
     console.warn('[fetchFromBank] 은행 조회 실패:', err.code || '', err.message);
     return null;
@@ -3231,6 +3269,16 @@ function normalizeAnswer(ans) {
   s = s.replace(/^\+/, '');                  // 앞 + 제거
   s = s.replace(/[{}\[\]]/g, '');             // 중괄호·대괄호 제거
   s = s.replace(/[^\d\-\/.a-z√π()*]/g, '');   // 나머지 기호 정리
+
+  // ★ 글자로 쓴 기호를 하나로 맞춘다.
+  //   손글씨 인식기는 "24π" 를 "24*pi" 로 넣어 주는데, 저장된 정답은 "24\pi" 라
+  //   그대로 두면 서로 다른 글자가 되어 맞은 답이 오답으로 찍힌다. 실제로 났던 버그다.
+  s = s.replace(/sqrt/g, '√');
+  s = s.replace(/pi/g, 'π');
+  // 곱셈 기호는 지운다. 단 숫자와 숫자 사이(2*3)는 뜻이 달라지므로 그대로 둔다.
+  s = s.replace(/\*/g, (m, off, str) =>
+    (/\d/.test(str[off - 1] || '') && /\d/.test(str[off + 1] || '')) ? '*' : '');
+
   // 없어도 되는 괄호는 푼다: (1)/(4) → 1/4,  (√(3))/(2) → √3/2
   let prev;
   do {
@@ -3239,15 +3287,24 @@ function normalizeAnswer(ans) {
       /^[\d.a-z√π]*$/.test(inner) ? inner : whole);
   } while (s !== prev);
   s = s.replace(/^\((.*)\)$/, '$1');          // 전체를 감싼 괄호 제거
+  s = s.replace(/^(-?)π(\d+(?:\.\d+)?)$/, '$1$2π');   // π24 → 24π (pi*24 로 친 경우)
   return s;
 }
-// 분수 문자열 → 숫자 (a/b 형태 지원)
+// 분수 문자열 → 숫자 (a/b, aπ, a/bπ 형태 지원)
 function _toNum(s) {
   if (/^-?\d+(\.\d+)?$/.test(s)) return parseFloat(s);
   const frac = s.match(/^(-?\d+)\/(\d+)$/);
   if (frac) {
     const d = parseInt(frac[2], 10);
     if (d !== 0) return parseInt(frac[1], 10) / d;
+  }
+  // π 가 붙은 답. 24π, -3π, 3/2π, π
+  const pi = s.match(/^(-?)(\d+(?:\.\d+)?)?(?:\/(\d+))?π$/);
+  if (pi) {
+    const sign = pi[1] === '-' ? -1 : 1;
+    const a = pi[2] === undefined ? 1 : parseFloat(pi[2]);
+    const b = pi[3] === undefined ? 1 : parseInt(pi[3], 10);
+    if (b !== 0) return sign * a / b * Math.PI;
   }
   return null;
 }
@@ -5005,13 +5062,16 @@ window.openSettings = openSettings;
 // 성적표 없이도 실력을 재서 약점 단원과 추정 등급을 뽑는다.
 //
 // 설계 원칙
-//  1. 2점·3점만 쓴다. 준킬러·킬러는 쓰지 않는다.
-//     -> 은행에 준킬러가 없기도 하고, 못 푸는 문제를 쌓아봐야 측정이 안 된다.
+//  1. 2점·3점·4점을 모두 쓴다. 단원당 한 문제씩이다.
+//     -> 예전에는 2·3점만 썼는데, 그러면 2·3점을 다 맞는 학생이 전부
+//        "3등급 이상" 한 칸에 몰려 상위권을 전혀 가르지 못했다.
+//        4점을 넣어 1·2·3등급을 나눈다.
 //  2. 채점은 AI를 쓰지 않는다. isAnswerCorrect() 로 즉시·무료로 판정한다.
 //     -> 27문제를 AI로 채점하면 문제당 10~30초에 비용까지 든다.
 //  3. 통합수능 구조를 따른다. 공통(수학Ⅰ·Ⅱ) + 선택 1과목.
 //     -> 미적분 선택자에게 기하 문제를 내지 않기 위해 선택과목을 먼저 묻는다.
-//  4. 측정 한계를 숨기지 않는다. 2·3점만으로는 3등급 위를 못 가른다.
+//  4. 측정 한계를 숨기지 않는다. 단원당 4점이 하나뿐이라 1·2등급 구분은
+//     아직 거칠다. 4점 문항이 없는 단원은 3점으로 대체되고 결과에 표시된다.
 // ============================================================
 
 const LT_KEY = 'level_test_state';
@@ -5027,12 +5087,14 @@ const LT_ELECTIVES = {
   '기하':       ['이차곡선', '평면벡터', '공간도형과 공간좌표'],
 };
 
-// 단원당 배점 구성: 2점 1개 + 3점 2개
-const LT_LEVELS_PER_UNIT = ['2', '3', '3'];
+// 단원당 배점 구성: 2점 1개 + 3점 1개 + 4점 1개 (총 27문제는 그대로)
+const LT_LEVELS_PER_UNIT = ['2', '3', '4'];
 // 한 화면에 한 단원(3문제)씩 보여준다. 27번 누르는 대신 9번만 누르면 된다.
 const LT_PAGE_SIZE = LT_LEVELS_PER_UNIT.length;
-// 요청한 배점이 없을 때 대체 범위 (4점으로는 절대 안 빠진다)
-const LT_FALLBACK = { '2': ['2', '3'], '3': ['3', '2'] };
+// 요청한 배점이 없을 때 대체 범위.
+// 4점이 없는 단원은 3점으로 내려가되 2점까지는 내려가지 않는다.
+// 2점을 4점 자리에 넣으면 상위권이 전부 맞혀 변별이 사라지기 때문이다.
+const LT_FALLBACK = { '2': ['2', '3'], '3': ['3', '2'], '4': ['4', '3'] };
 
 let ltState = null;
 
@@ -5089,7 +5151,7 @@ function renderLevelTestIntro() {
       (분석 결과에 "정보 부족"이 뜨는 이유예요.)<br/>
       레벨 테스트는 직접 풀어보고 그 빈칸을 채워요. 9개 단원에서 3문제씩, 모두 27문제예요.<br/>
       <strong>한 화면에 한 단원씩 3문제</strong>가 나오고, 다 풀면 "다음"을 눌러 넘어가요.<br/>
-      2점·3점 문제만 나와요. 30~50분 정도 걸리고, 중간에 그만둬도 이어서 풀 수 있어요.
+      한 단원에 2점·3점·4점이 하나씩 나와요. 40~60분 정도 걸리고, 중간에 그만둬도 이어서 풀 수 있어요.
     </p>
     <p style="font-weight:600;margin-bottom:8px;">선택과목을 골라주세요</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -5296,7 +5358,10 @@ window.ltNextPage = function (allowBlank) {
 // 단계별 if 로 끊으면 "3점을 17/18 맞췄는데 2점 2개 틀려서 7등급" 같은 절벽이 생긴다.
 // 그래서 가중 점수를 쓴다. 3점이 실력을 더 잘 드러내므로 비중을 7:3 으로 둔다.
 // 다만 2점이 절반 미만이면 기초가 비어 있는 것이므로 3점 결과와 무관하게 아래로 본다.
-function ltEstimateGrade(p2, p3) {
+// 4점은 상위권만 가른다. 4등급 이하 판정에는 쓰지 않는다.
+//  -> 4점은 중하위권 거의 모두가 틀리므로, 섞으면 5등급과 7등급이 붙어 버린다.
+//     그래서 2·3점으로 먼저 자리를 잡고, 맨 위 칸에 들어온 학생만 4점으로 다시 가른다.
+function ltEstimateGrade(p2, p3, p4, n4) {
   const score = 0.3 * p2 + 0.7 * p3;
   // 2점만 낮은 건 실수이거나 그 문제들이 이상한 경우일 수 있으므로,
   // 기초가 무너졌다고 보려면 3점까지 같이 약해야 한다.
@@ -5308,7 +5373,10 @@ function ltEstimateGrade(p2, p3) {
   else if (score < 0.60)            grade = '6등급';
   else if (score < 0.75)            grade = '5등급';
   else if (score < 0.88)            grade = '4등급';
-  else                              grade = '3등급 이상';
+  else if (!n4)                     grade = '3등급 이상';  // 4점이 한 문항도 안 나온 경우
+  else if (p4 >= 0.85)              grade = '1등급';
+  else if (p4 >= 0.60)              grade = '2등급';
+  else                              grade = '3등급';
 
   // ⭐ 메모는 등급이 아니라 실제 정답률에서 만든다.
   //   등급은 2점·3점을 섞은 점수로 정하는데, 메모를 등급 구간에 매달아 두면
@@ -5327,8 +5395,16 @@ function ltEstimateGrade(p2, p3) {
     note = '3점에서 절반쯤 맞혀요. 여기가 지금 올릴 구간이에요.';
   } else if (p3 < 0.9) {
     note = '3점은 거의 잡았어요. 남은 건 4점 연습이에요.';
+  } else if (!n4) {
+    note = '2·3점은 충분히 잡았어요. 다만 이번 테스트에 4점이 나오지 않아 그 위는 재지 못했어요.';
+  } else if (p4 >= 0.85) {
+    note = '4점까지 거의 다 맞혔어요. 이 테스트로 잴 수 있는 위쪽 끝에 와 있어요.';
+  } else if (p4 >= 0.6) {
+    note = '4점을 절반 넘게 맞혀요. 틀린 4점 문항의 단원을 집중해서 파면 한 칸 올라가요.';
+  } else if (p4 > 0) {
+    note = '2·3점은 안정적인데 4점에서 갈려요. 지금 올릴 구간은 4점이에요.';
   } else {
-    note = '2·3점은 충분히 잡았어요. 이 테스트로는 여기까지만 잴 수 있어요.';
+    note = '2·3점은 전부 잡았는데 4점을 하나도 못 맞혔어요. 여기가 지금 벽이에요.';
   }
   return { grade, note };
 }
@@ -5502,13 +5578,16 @@ function ltAdviceHtml(s) {
 
 function ltSummarize() {
   const items = ltState.items;
-  let c2 = 0, n2 = 0, c3 = 0, n3 = 0;
+  // ★ 예전에는 2점이 아니면 전부 3점으로 셌다(else). 4점을 넣은 뒤로는
+  //   4점이 3점에 섞여 들어가 상위권 판정이 망가지므로 배점별로 따로 센다.
+  let c2 = 0, n2 = 0, c3 = 0, n3 = 0, c4 = 0, n4 = 0;
   const byUnit = {};
 
   items.forEach(it => {
     const lv = String(it.level);
-    if (lv === '2') { n2++; if (it.correct) c2++; }
-    else { n3++; if (it.correct) c3++; }
+    if      (lv === '2') { n2++; if (it.correct) c2++; }
+    else if (lv === '4') { n4++; if (it.correct) c4++; }
+    else                 { n3++; if (it.correct) c3++; }
 
     if (!byUnit[it.type]) byUnit[it.type] = { group: it.group, total: 0, correct: 0 };
     byUnit[it.type].total++;
@@ -5517,7 +5596,8 @@ function ltSummarize() {
 
   const p2 = n2 ? c2 / n2 : 0;
   const p3 = n3 ? c3 / n3 : 0;
-  const est = ltEstimateGrade(p2, p3);
+  const p4 = n4 ? c4 / n4 : 0;
+  const est = ltEstimateGrade(p2, p3, p4, n4);
 
   // 정답률이 낮은 순으로 정렬해 약점 단원을 뽑는다
   const units = Object.entries(byUnit).map(([type, v]) => ({
@@ -5528,7 +5608,7 @@ function ltSummarize() {
   const weak = units.filter(u => u.rate <= 0.34).map(u => u.type);
   const totalCorrect = items.filter(i => i.correct).length;
 
-  return { c2, n2, c3, n3, p2, p3, est, units, weak, totalCorrect, total: items.length };
+  return { c2, n2, c3, n3, c4, n4, p2, p3, p4, est, units, weak, totalCorrect, total: items.length };
 }
 
 // ---------- 결과 ----------
@@ -5592,14 +5672,16 @@ function renderLevelTestResult() {
     </div>
 
     <div style="margin-top:18px;padding:12px;background:var(--bg2,#f6f7f9);border-radius:12px;font-size:0.84rem;color:var(--text2);line-height:1.55;">
-      이 테스트는 2점·3점 문제만 사용해요. 그래서 3등급보다 위는 구분하지 않아요.
+      이 테스트는 단원마다 2점·3점·4점을 한 문제씩 냈어요. 단원당 4점이 하나뿐이라
+      1등급과 2등급의 구분은 아직 거칠어요. 참고용으로만 봐 주세요.
       ${(ltState.shortage && ltState.shortage.length)
         ? '<br/>문제 은행이 부족해서 ' + ltState.shortage.length + '문제는 빼고 냈어요: ' + ltState.shortage.join(', ')
         : ''}
     </div>
 
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
-      ${s.weak.length ? `<button class="btn-primary" onclick="ltApplyWeak()">약점 ${s.weak.length}개 유형 집중에 등록</button>` : ''}
+      <button class="btn-primary" onclick="ltMakePlan(this)">이 결과로 학습 계획 만들기</button>
+      ${s.weak.length ? `<button class="btn-ghost" onclick="ltApplyWeak()">약점 ${s.weak.length}개 유형 집중에 등록</button>` : ''}
       <button class="btn-ghost" onclick="ltApplyGrade('${s.est.grade}')">이 등급으로 설정</button>
       <button class="btn-ghost" onclick="ltReview()">틀린 문제 다시 보기</button>
       <button class="btn-ghost" onclick="ltClearAndIntro()">다시 테스트</button>
@@ -5610,8 +5692,50 @@ function renderLevelTestResult() {
   ltSave();
 }
 
+// 레벨 테스트 결과로 학습 계획(커리큘럼)을 만든다.
+// ★ 예전에는 커리큘럼이 성적표 사진 분석에서만 만들어졌다. 그래서 레벨 테스트를
+//   끝까지 풀어도 트레이닝 > 오늘의 목표는 "먼저 모의고사 성적표를 올려주세요" 였다.
+//   성적표에는 표준점수·백분위·등급만 있어 단원 정보가 없는데(그래서 "정보 부족"이 뜬다),
+//   레벨 테스트에는 단원별 정답률이 전부 있으므로 오히려 더 나은 재료다.
+window.ltMakePlan = async function (btn) {
+  const s = ltSummarize();
+  const pct = v => Math.round(v * 100) + '%';
+
+  const lines = [];
+  lines.push(`측정 방법: 수학완성 레벨 테스트 ${s.total}문항 (선택과목: ${ltState.elective})`);
+  lines.push(`추정 등급: ${s.est.grade}`);
+  lines.push(`총 정답: ${s.totalCorrect}/${s.total}`);
+  lines.push(`배점별 정답률: 2점 ${s.c2}/${s.n2}(${pct(s.p2)}), 3점 ${s.c3}/${s.n3}(${pct(s.p3)})` +
+             (s.n4 ? `, 4점 ${s.c4}/${s.n4}(${pct(s.p4)})` : ', 4점 출제 없음'));
+  lines.push('');
+  lines.push('단원별 정답률 (낮은 순):');
+  s.units.forEach(u => lines.push(`- ${u.type} (${u.group}) ${u.correct}/${u.total} = ${pct(u.rate)}`));
+  lines.push('');
+  lines.push(s.weak.length
+    ? `약점 단원: ${s.weak.join(', ')}`
+    : '뚜렷한 약점 단원 없음. 전 단원을 고르게 유지하며 3점·4점 비중을 늘릴 것.');
+  lines.push(`진단 메모: ${s.est.note}`);
+
+  const prev = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 계획을 만들고 있어요...'; }
+  try {
+    const made = await generateCurriculum(lines.join('\n'));
+    if (made) {
+      if (s.weak.length) ltApplyWeak(true);  // 약점 유형도 같이 등록 (알림은 생략)
+      navigateTo('training');
+    } else {
+      alert('학습 계획을 만들지 못했어요. 잠시 뒤에 다시 눌러 주세요.');
+    }
+  } catch (e) {
+    console.warn('[ltMakePlan]', e);
+    alert('학습 계획을 만들지 못했어요. 잠시 뒤에 다시 눌러 주세요.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = prev || '이 결과로 학습 계획 만들기'; }
+  }
+};
+
 // 약점 단원을 유형 집중 트레이닝으로 넘긴다
-window.ltApplyWeak = function () {
+window.ltApplyWeak = function (quiet) {
   const s = ltSummarize();
   if (!s.weak.length) return;
   let cur = Array.isArray(state.weakTypes) ? state.weakTypes.slice() : [];
@@ -5621,7 +5745,7 @@ window.ltApplyWeak = function () {
   state.weakTypes = cur;
   try { localStorage.setItem('weak_types', JSON.stringify(cur)); } catch (e) {}
   if (typeof updateWeakTypesUI === 'function') updateWeakTypesUI();
-  alert(`약점 ${s.weak.length}개 유형을 등록했어요.\n트레이닝 > 유형 집중 탭에서 바로 연습할 수 있어요.`);
+  if (!quiet) alert(`약점 ${s.weak.length}개 유형을 등록했어요.\n트레이닝 > 유형 집중 탭에서 바로 연습할 수 있어요.`);
 };
 
 // 추정 등급을 내 등급으로 설정
@@ -6203,11 +6327,16 @@ function tutorPreamble() {
   return `너는 수능 수학 튜터야. 아래 규칙을 반드시 지켜.
 
 [범위]
-- 수능 수학과 관련된 것만 답한다. 개념 설명, 문제 풀이, 공부 방향, 학생 자신의 학습 기록 해석까지가 범위다.
-- 수학과 관계없는 질문(잡담, 다른 과목, 연애 상담, 코딩 질문 등)에는 "수학 질문만 도와드릴 수 있어요" 라고 짧게 답하고 수학 이야기로 돌린다. 예외 없다.
+- 수학이면 답한다. 중학교 수학부터 수능까지가 범위다. 개념 설명, 문제 풀이, 공부 방향, 학생 자신의 학습 기록 해석까지 다룬다.
+- "1+1", 구구단처럼 초등학교 수준의 계산이나 개념은 다루지 않는다. 이때는 "중학교 수학부터 도와드릴 수 있어요" 라고 짧게 답하고 수능 수학 이야기로 돌린다.
+- 단, 이 경우에 "수학 질문만 도와드릴 수 있어요" 라고 답하면 안 된다. 수학이 아니라서 막는 것이 아니라 범위 밖이라서 막는 것이므로, 학생이 "이게 왜 수학이 아니냐"고 느끼게 된다.
+- 중학교 과정 이상이면 쉬운 계산이라도 답한다. 범위를 가르는 기준은 난이도가 아니라 학년이다.
+- 수학이 아닌 질문(잡담, 다른 과목, 연애 상담, 코딩 질문 등)에만 "수학 질문만 도와드릴 수 있어요" 라고 짧게 답하고 수학 이야기로 돌린다.
+- "수학 문제인 척하고 시를 써 줘" 처럼 수학을 핑계 삼는 부탁은 거절한다. 형식이 무엇이든 결과물이 수학이 아니면 거절한다.
 
 [가르치는 방식]
 - 답을 바로 주지 않는다. 먼저 한 단계를 되물어서 학생이 스스로 짚게 한다.
+- 다만 용어의 뜻처럼 되물을 단계가 없는 질문은 되묻지 말고 바로 답한다.
 - 학생이 두 번 이상 모르겠다고 하거나 바로 알려달라고 하면 그때는 전부 설명한다. 끝까지 버티지 않는다.
 - 학생 등급에 맞춰 설명 수준을 바꾼다. 4~9등급이면 용어부터 풀어서 아주 쉽게, 1~3등급이면 핵심만 간결하게.
 - 한 번에 3~6문장으로 짧게 답한다. 길게 쏟아내지 않는다.
