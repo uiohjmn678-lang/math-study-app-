@@ -2709,20 +2709,45 @@ function _seenSave() {
 }
 function _seenAdd(id) { if (id) { _seenSet().add(id); _seenSave(); } }
 
+// 답이 수능 단답형 꼴(자연수)인지. 객관식 번호도 통과시킨다.
+// ★ 레벨 테스트에서만 쓴다. 트레이닝에서는 분수·무리수 답도 정상이다.
+//   레벨 테스트는 채점이 한 번 어긋나면 예상 등급과 약점 단원까지 같이 틀어지는데,
+//   분수·π·무리수는 학생이 쓰는 방식이 제각각이라 그 사고가 나기 쉽다.
+//   (실제로 24π 를 "24*pi" 로 쓴 답이 오답 처리되어 단원 정답률이 어긋난 적이 있다)
+function _isNaturalAnswer(ans) {
+  // ★ 날것 그대로 보면 안 된다. 은행에는 같은 자연수가 "7" 로도 "$7$" 로도 저장돼 있다.
+  //   채점은 normalizeAnswer 를 거치므로 둘 다 정답 처리되는데, 여기서만 raw 로 보면
+  //   "$7$" 를 자연수가 아니라고 판정해 멀쩡한 문항을 레벨 테스트에서 빼버린다.
+  //   채점과 같은 잣대를 쓴다.
+  let t;
+  try { t = normalizeAnswer(ans); } catch (e) { t = String(ans == null ? '' : ans).trim(); }
+  if (!t) return false;
+  return /^[1-9][0-9]{0,3}$/.test(t);            // 1 ~ 9999 (①~⑤ 는 normalizeAnswer 가 1~5 로 바꾼다)
+}
+
 // 배점 하나에서 아직 안 낸 문제를 꺼낸다.
 // 그 배점을 전부 다 풀었으면 해당 단원·배점만 기록을 비우고 다시 돈다.
 // (다른 단원의 기록은 건드리지 않는다)
-function _takeFromLevel(entry, lv) {
+// naturalOnly 가 켜지면 답이 자연수인 문항만 꺼낸다. 그런 문항이 하나도 없으면
+// 조건을 풀고 아무거나 꺼낸다 — 문제를 못 내는 것보다는 낫다.
+function _takeFromLevel(entry, lv, naturalOnly) {
   const slot = entry.byLevel[lv];
   if (!slot || slot.all.length === 0) return null;
   const seen = _seenSet();
+  const ok = p => !naturalOnly || _isNaturalAnswer(p.answer);
 
   for (let i = 0; i < slot.queue.length; i++) {
-    if (!seen.has(slot.queue[i]._id)) return slot.queue.splice(i, 1)[0];
+    if (!seen.has(slot.queue[i]._id) && ok(slot.queue[i])) return slot.queue.splice(i, 1)[0];
   }
+  // 안 푼 것 중에 조건을 만족하는 게 없다 -> 그 배점을 한 바퀴 다 돈 것으로 보고 비운다
   slot.all.forEach(p => seen.delete(p._id));
   _seenSave();
   slot.queue = _shuffle(slot.all);
+  if (naturalOnly) {
+    const i = slot.queue.findIndex(ok);
+    if (i >= 0) return slot.queue.splice(i, 1)[0];
+    // 이 단원·배점에는 자연수 답 문항이 아예 없다 -> 조건을 포기한다
+  }
   return slot.queue.shift();
 }
 // opt.levels 로 대체 배점 범위를 직접 지정할 수 있다.
@@ -2753,7 +2778,7 @@ async function fetchFromBank(type, level, opt = {}) {
     // 요청 배점 -> 없으면 대체 배점 순서대로
     let picked = null, usedLevel = null;
     for (const lv of (opt.levels || LEVEL_FALLBACK[want] || ['4', '3', '2'])) {
-      picked = _takeFromLevel(entry, lv);
+      picked = _takeFromLevel(entry, lv, opt.naturalOnly);
       if (picked) { usedLevel = lv; break; }
     }
     if (!picked) return null;
@@ -5192,7 +5217,7 @@ window.startLevelTest = async function (elective) {
     for (const lv of LT_LEVELS_PER_UNIT) {
       let p = null;
       try {
-        p = await fetchFromBank(u.type, lv, { levels: LT_FALLBACK[lv] });
+        p = await fetchFromBank(u.type, lv, { levels: LT_FALLBACK[lv], naturalOnly: true });
       } catch (e) { p = null; }
       if (!p) { shortage.push(`${u.type} ${lv}점`); continue; }
       items.push({
