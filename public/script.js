@@ -5275,6 +5275,9 @@ window.startLevelTest = async function (elective) {
         answer: p.answer,
         hint: p.hint || '',
         desmos: p.desmos || [],
+        // ★ 미리 만들어 둔 해설을 같이 담아 둔다. 예전에는 여기서 버려서
+        //   "틀린 문제 다시 보기" 에 답만 나오고 왜 틀렸는지는 알 수 없었다.
+        solution: p.solution || '',
         userAns: null,
         correct: null,
       });
@@ -5855,6 +5858,16 @@ window.ltReview = function () {
         <span style="color:var(--text3);margin:0 6px;">|</span>
         <span style="color:var(--green,#34C759);">정답 ${escapeHtml(it.answer || '')}</span>
       </div>
+      ${it.solution
+        ? `<details style="margin-top:10px;">
+             <summary style="cursor:pointer;font-size:0.86rem;font-weight:600;color:var(--primary,#5B7FFF);">
+               해설 보기
+             </summary>
+             <div style="margin-top:8px;">${renderFeedback(it.solution, false, true, it.answer || '')}</div>
+           </details>`
+        : `<p style="margin-top:10px;font-size:0.8rem;color:var(--text3);">
+             이 문제는 해설이 저장되기 전에 출제되었어요. 다시 테스트하면 해설이 함께 나와요.
+           </p>`}
     </div>`).join('');
   box.innerHTML = `<h3>❌ 틀린 문제 ${wrong.length}개</h3>${html}
     <button class="btn-ghost" onclick="renderLevelTestResult()">결과로 돌아가기</button>`;
